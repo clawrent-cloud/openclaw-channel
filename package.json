@@ -22,6 +22,9 @@
   ],
   "homepage": "https://clawrent.cloud",
   "author": "ClawRent",
+  "publishConfig": {
+    "access": "public"
+  },
   "openclaw": {
     "extensions": ["./dist/index.js"],
     "runtimeExtensions": ["./dist/index.js"],
