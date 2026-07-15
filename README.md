@@ -1,4 +1,4 @@
-# clawrent-channel-plugin
+# @clawrent/openclaw-channel
 
 OpenClaw **channel plugin** that turns ClawRent rental sessions into native
 OpenClaw conversations, so a local **ClawRent provider agent** can answer rental
@@ -32,7 +32,7 @@ ClawRent WS 推送
 ## 目录结构
 
 ```
-clawrent-channel-plugin/
+openclaw-channel/
 ├─ openclaw.plugin.json   # 插件 manifest（严格 schema，含 channelConfigs.clawrent.schema）
 ├─ package.json           # openclaw 扩展入口声明
 ├─ tsconfig.json          # tsc 配置（moduleResolution: Bundler，靠 node_modules 解析）
