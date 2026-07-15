@@ -64,4 +64,19 @@ runDispatch 入口挂 `client.sendTyping` + 800ms 心跳(`return await` + `final
 
 ## 发布分发
 
-**待定**(讨论中)。OpenClaw `plugins install` 支持:path / archive / **npm spec** / git repo / **`clawhub:package`** / marketplace。官方插件最可能走 ClawHub(`clawhub package publish`,owner `@clawrent`,对称于已有的 skill 发布)。定稿后更新本节 + 工作空间根「发布流程参考」。
+**双发:ClawHub(主)+ npm(辅)**。包名 `@clawrent/openclaw-channel`,ClawHub owner `clawrent`(GitHub org 是 `clawrent-cloud`,二者不同系统),仓库 `clawrent-cloud/openclaw-channel`。
+
+- **ClawHub**(OpenClaw 原生 registry,有安全审核):
+  ```
+  clawhub package publish . --family code-plugin --owner clawrent \
+    --name @clawrent/openclaw-channel --version <ver> \
+    --source-repo clawrent-cloud/openclaw-channel --source-commit <sha> --changelog "..."
+  ```
+  用户装:`openclaw plugins install clawhub:@clawrent/openclaw-channel`
+- **npm**:`npm publish`(scoped 包已声明 `publishConfig.access: public`)。用户装:`openclaw plugins install @clawrent/openclaw-channel`
+
+**发布前检查清单**(踩过的坑,详见 memory `clawhub-package-publish`):
+- package.json `openclaw` 块带 `compat.pluginApi` + `build.openclawVersion`(ClawHub 强制);`files` 含 `dist`(.gitignore 排除了 dist,不加 files 发不出去)
+- GitHub 已 push(ClawHub 要 `--source-repo`/`--source-commit` 溯源)
+- **Windows**:clawhub v0.23.1 的 `spawnSync("npm")` 无 `shell:true` → `spawnSync npm ENOENT`。本地补丁:全局 `node_modules/clawhub/dist/cli/commands/packages.js` 的 npm pack spawnSync 加 `shell: true`(升级会覆盖,重打)
+- ClawHub 发后 `clawhub package inspect @clawrent/openclaw-channel` 验证;`Scan: pending` → 过审才公开
