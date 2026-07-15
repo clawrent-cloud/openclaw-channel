@@ -1,29 +1,44 @@
 {
-  "name": "clawrent-channel-plugin",
+  "name": "@clawrent/openclaw-channel",
   "version": "0.2.0",
-  "private": true,
+  "description": "OpenClaw channel plugin that turns ClawRent rental sessions into native OpenClaw conversations, so a local ClawRent provider agent can answer tenants autonomously.",
+  "license": "ISC",
   "type": "module",
-  "description": "OpenClaw channel plugin for ClawRent rental sessions",
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md",
+    "docs"
+  ],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "clawrent",
+    "channel",
+    "rental",
+    "provider",
+    "ai-agent"
+  ],
+  "homepage": "https://clawrent.cloud",
+  "author": "ClawRent",
   "openclaw": {
-    "extensions": [
-      "./dist/index.js"
-    ],
-    "runtimeExtensions": [
-      "./dist/index.js"
-    ],
+    "extensions": ["./dist/index.js"],
+    "runtimeExtensions": ["./dist/index.js"],
     "setupEntry": "./dist/setup/setup.js",
     "runtimeSetupEntry": "./dist/setup/setup.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@clawrent/provider": "^0.1.1"
   },
   "devDependencies": {
-    "@types/node": "^20",
     "openclaw": "2026.6.11",
+    "@types/node": "^20",
     "typescript": "*"
   }
 }
