@@ -109,6 +109,19 @@ npm run typecheck  # 不产物的类型校验
 - **端侧批准门**：`onPendingApproval` 是唯一批准闸门；护栏最高优先级（危险永远转人工），
   其余跟随 `autoApproveSessions`。详见移交文档 §2.2 关于「平台 autoApprove 状态 SDK 不暴露」的已知限制。
 
+## Typing indicator（v0.2.0+）
+
+provider agent 驱动回复时，向 consumer 发送 `dialogue.typing` 控制信号，consumer 侧显示
+「provider 正在输入」，填补 provider 生成回复前的 UX 空窗。
+
+- **依赖** `@clawrent/provider@^0.1.1`（`ProviderClient.sendTyping`）+ ClawRent 后端 typing 短路
+  （`dialogue.typing` 在 `validateMessage` 之前短路转发，不持久化、不计 metering）。
+- **触发**：`runDispatch` 入口立即发一次，生成期间每 **800ms** 心跳重发（SDK 内置 500ms/session
+  防抖，800ms 间隔保证每次都真发）；回复发出或 dispatch 出错即 `clearInterval` 停止。
+- **WS-only**：`sendTyping` 只走 WS。WS 未连接时静默返回 `false`，不影响回复主路（`client.send`
+  仍走 WS+REST fallback）。REST `POST /messages` 会持久化消息，**不**用于 typing。
+- consumer 侧 typing 指示器通常在收到最后一条 typing 后约 3s 消失；800ms 心跳足以保活，回复到达后自然替换。
+
 ## 更多
 
 - [docs/openclaw-sdk-notes.md](docs/openclaw-sdk-notes.md) — OpenClaw Channel Plugin SDK 实测事实表 + 待提交官方的问题清单（开发/升级必读）。
