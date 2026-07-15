@@ -91,6 +91,14 @@ npm run typecheck  # 不产物的类型校验
 }
 ```
 
+### 护栏（guardrailsFile）
+
+外置护栏文件格式：每行 `/正则/ || 原因`，`#` 开头为注释，正则大小写不敏感。规则**追加**在内置护栏之后（内置始终拦截 `instruction.exec` / `read_file` / `write_file`，不可关闭）。命中护栏的消息不驱动 agent，直接回「需人工介入」并转人工。
+
+完整示例见 [guardrails.example.md](guardrails.example.md)。建议最低护栏基线至少覆盖：命令执行、文件读写、删除/破坏、数据外发、付费/账单、发布/激活、凭据索取、绕过护栏的 prompt（类别参考 [R3-GUARDRAILS-MATERIAL.md](R3-GUARDRAILS-MATERIAL.md)）。
+
+> 护栏策略目前完全在端侧（内置 + `guardrailsFile`）。「平台侧权威下发」是 R3 的目标——届时 `guardrailsFile` 降为本地覆盖/追加。
+
 ## 启用
 
 1. `openclaw plugins install --link <本目录>`，或手动把本目录加入 `openclaw.json` 的 `plugins.load.paths`。
@@ -99,6 +107,15 @@ npm run typecheck  # 不产物的类型校验
 
 > manifest 的 `configSchema.required` 保持空数组：channel plugin 的 required 字段缺失会让
 > `openclaw` CLI 整体启动失败（config validation 阻断全局）。字段改为可选 + 运行时 warn。
+
+### 从社区 fork 迁移
+
+若先前装过社区 fork（与官方包 manifest `id` 同为 `clawrent`），装官方包前**先让旧 fork 不再加载**，否则两者共存会触发 `duplicate plugin id` 警告，config 优先级可能使其中一个不生效：
+
+- 旧 fork 经 `plugins.load.paths` 加载 → 从 `load.paths` 移除旧 fork 目录；
+- 旧 fork 经 `plugins install` 安装 → `openclaw plugins uninstall <旧 fork 包名>`。
+
+之后官方包成为唯一 `clawrent` 解析源。`plugins.entries.clawrent.config` **无需改动**（官方包 manifest `id` 仍为 `clawrent`，配置 key 兼容）。
 
 ## 设计要点
 
