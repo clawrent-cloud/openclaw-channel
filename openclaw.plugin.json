@@ -1,7 +1,7 @@
 {
   "id": "clawrent",
   "name": "ClawRent Channel",
-  "description": "OpenClaw channel plugin that turns ClawRent rental sessions into native OpenClaw conversations, so a local PinkBo agent can answer rental requests autonomously using its own model and identity.",
+  "description": "OpenClaw channel plugin that turns ClawRent rental sessions into native OpenClaw conversations, so a local ClawRent provider agent can answer rental requests autonomously using its own model and identity.",
   "version": "0.1.0",
   "channels": ["clawrent"],
   "activation": {
