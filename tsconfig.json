@@ -11,19 +11,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "ignoreDeprecations": "6.0",
-    "types": ["node"],
-    "typeRoots": [
-      "C:/Users/PinkBagelGua/AppData/Roaming/npm/node_modules/openclaw/node_modules/@types",
-      "./node_modules/@types"
-    ],
-    "paths": {
-      "openclaw/plugin-sdk/*": [
-        "C:/Users/PinkBagelGua/AppData/Roaming/npm/node_modules/openclaw/dist/plugin-sdk/*"
-      ],
-      "openclaw/*": [
-        "C:/Users/PinkBagelGua/AppData/Roaming/npm/node_modules/openclaw/dist/*"
-      ]
-    }
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"]
 }

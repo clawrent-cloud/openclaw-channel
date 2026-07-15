@@ -18,6 +18,8 @@
     "@clawrent/provider": "^0.1.0"
   },
   "devDependencies": {
+    "openclaw": "2026.6.11",
+    "@types/node": "^20",
     "typescript": "*"
   }
 }
