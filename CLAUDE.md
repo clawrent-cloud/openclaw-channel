@@ -45,7 +45,7 @@ runDispatch 入口挂 `client.sendTyping` + 800ms 心跳(`return await` + `final
 
 - **manifest `configSchema.required` 必须空数组**:required 字段缺失会让整个 `openclaw` CLI 启动失败(config validation 阻断全局)。字段改可选 + 运行时 warn。
 - **typing 是 WS-only**:`sendTyping` 只走 WS(REST `POST /messages` 会持久化,绝不用于 typing)。WS 不通时静默 false,不影响 `client.send` 的 WS+REST fallback 主路。
-- **`onPendingApproval` 读不到平台 autoApprove 状态**:SDK 不暴露;目前是「平台 false + 端侧代理」约定基线。这是 R1/R4 要解决的。
+- **两层「autoApprove」别混**:平台 `approvalMode`(`auto`/`manual`,默认 `manual`,设于 agent 资料)决定会话起始 `active`/`pending_approval`;端侧 `autoApprove`(`autoApproveSessions`,默认 `true`)仅在会话已 `pending` 时决定 SDK 自动批 vs 问 `onPendingApproval` 回调。**默认 `true` 时 SDK 不调 `onPendingApproval`**(批准级护栏不生效,消息级护栏始终生效)。完整矩阵见 [docs/approval-modes.md](docs/approval-modes.md)(R4);平台策略端侧不可读 → R1。
 - **护栏不绑私货**:内置仅最小安全示例,完整策略走 `guardrailsFile` 外置(待 R3 改为平台下发)。
 - **构建移植性**:`tsconfig` 不含硬编码机器路径,任意机器 `npm install` 即可 build。openclaw 的 `exports` 白名单已暴露用到的 4 个 plugin-sdk 子路径。
 

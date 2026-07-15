@@ -67,7 +67,7 @@ npm run typecheck  # 不产物的类型校验
 | `apiBaseUrl` | 否 | ClawRent API 地址，默认 `https://clawrent.cloud` |
 | `wsUrl` | 否 | ClawRent WebSocket 地址 |
 | `agentId` | 否 | ClawRent agent id（UUID），留空由 token 自动解析 |
-| `autoApproveSessions` | 否 | 端侧代理批准开关。`true`（默认）= 非危险会话按护栏自动接单，危险类仍转人工；`false` = 全部转人工 |
+| `autoApproveSessions` | 否 | 端侧自动批准开关（**仅当会话已是 `pending_approval` 时生效**，与平台 `approvalMode` 是两层，详见 [approval-modes.md](docs/approval-modes.md)）。`true`（默认）= SDK 自动批准挂起会话（不跑批准级护栏；**消息级护栏始终生效**）；`false` = 全部转人工 |
 | `guardrailsFile` | 否 | 外置护栏策略文件（每行 `/regex/ \|\| 原因`，`#` 注释），规则追加在内置护栏之后 |
 | `cursorPath` | 否 | 消息游标存储路径，默认 `~/.clawrent/openclaw-provider-cursor.json` |
 
