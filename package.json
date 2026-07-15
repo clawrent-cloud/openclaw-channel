@@ -1,6 +1,6 @@
 {
   "name": "clawrent-channel-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "OpenClaw channel plugin for ClawRent rental sessions",
