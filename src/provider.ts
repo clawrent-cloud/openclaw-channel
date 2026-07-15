@@ -191,33 +191,43 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
               recordInboundSession: opts.deps.recordInboundSession,
               record: { createIfMissing: true, updateLastRoute: true },
               runDispatch: async () => {
-                return opts.deps.dispatchReplyWithBufferedBlockDispatcher({
-                  ctx: ctxPayload,
-                  cfg: opts.cfg,
-                  dispatcherOptions: {
-                    deliver: async (payload: any) => {
-                      const replyText: string =
-                        payload?.text ?? payload?.content ?? "";
-                      if (!replyText.trim()) return;
-                      await client.send(sessionId, {
-                        type: "dialogue.message",
-                        payload: { content: replyText },
-                      });
-                      log(`replied session=${sessionId} (${replyText.length} chars)`);
-                    },
-                    // 模型跑失败时,把错误回发给租户(不静默),便于人工发现。
-                    onError: async (err: any) => {
-                      const msg = err?.message ?? String(err);
-                      log(`dispatch error session=${sessionId}: ${msg}`);
-                      await client
-                        .send(sessionId, {
+                // 通知 consumer:provider 正在生成回复(dialogue.typing 控制信号,后端短路
+                // 转发、不持久化/不计 metering)。WS-only:sendTyping 在 WS 非 OPEN 时静默
+                // 返回 false,不影响下方 client.send 的 WS+REST fallback 主路。
+                client.sendTyping(sessionId);
+                // 长生成期间持续心跳;SDK 内置 500ms/session 防抖,800ms 间隔保证每次真发。
+                const typingTimer = setInterval(() => client.sendTyping(sessionId), 800);
+                try {
+                  return await opts.deps.dispatchReplyWithBufferedBlockDispatcher({
+                    ctx: ctxPayload,
+                    cfg: opts.cfg,
+                    dispatcherOptions: {
+                      deliver: async (payload: any) => {
+                        const replyText: string =
+                          payload?.text ?? payload?.content ?? "";
+                        if (!replyText.trim()) return;
+                        await client.send(sessionId, {
                           type: "dialogue.message",
-                          payload: { content: `⚠️ provider 生成回复时出错,需人工介入:${msg}` },
-                        })
-                        .catch((e: unknown) => log(`send error notice failed: ${String(e)}`));
+                          payload: { content: replyText },
+                        });
+                        log(`replied session=${sessionId} (${replyText.length} chars)`);
+                      },
+                      // 模型跑失败时,把错误回发给租户(不静默),便于人工发现。
+                      onError: async (err: any) => {
+                        const msg = err?.message ?? String(err);
+                        log(`dispatch error session=${sessionId}: ${msg}`);
+                        await client
+                          .send(sessionId, {
+                            type: "dialogue.message",
+                            payload: { content: `⚠️ provider 生成回复时出错,需人工介入:${msg}` },
+                          })
+                          .catch((e: unknown) => log(`send error notice failed: ${String(e)}`));
+                      },
                     },
-                  },
-                });
+                  });
+                } finally {
+                  clearInterval(typingTimer);
+                }
               },
             }),
           },
