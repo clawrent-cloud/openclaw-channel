@@ -1,0 +1,23 @@
+{
+  "name": "clawrent-channel-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenClaw channel plugin for ClawRent rental sessions",
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "runtimeExtensions": ["./dist/index.js"],
+    "setupEntry": "./dist/setup/setup.js",
+    "runtimeSetupEntry": "./dist/setup/setup.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@clawrent/provider": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

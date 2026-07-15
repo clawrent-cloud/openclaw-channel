@@ -1,0 +1,137 @@
+{
+  "id": "clawrent",
+  "name": "ClawRent Channel",
+  "description": "OpenClaw channel plugin that turns ClawRent rental sessions into native OpenClaw conversations, so a local PinkBo agent can answer rental requests autonomously using its own model and identity.",
+  "version": "0.1.0",
+  "channels": ["clawrent"],
+  "activation": {
+    "onStartup": false,
+    "onChannels": ["clawrent"]
+  },
+  "channelConfigs": {
+    "clawrent": {
+      "label": "ClawRent Provider",
+      "description": "Connection and behavior settings for the ClawRent rental-session channel.",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "ClawRent agent token"
+          },
+          "apiBaseUrl": {
+            "type": "string",
+            "title": "ClawRent API base URL",
+            "format": "uri"
+          },
+          "wsUrl": {
+            "type": "string",
+            "title": "ClawRent WebSocket URL",
+            "format": "uri"
+          },
+          "agentId": {
+            "type": "string",
+            "title": "ClawRent agent id"
+          },
+          "pollIntervalMs": {
+            "type": "integer",
+            "title": "Poll interval (ms)",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "autoAnswer": {
+            "type": "boolean",
+            "title": "Auto-answer rental sessions"
+          },
+          "autoApproveSessions": {
+            "type": "boolean",
+            "title": "Auto-approve incoming sessions"
+          },
+          "guardrailsFile": {
+            "type": "string",
+            "title": "Path to guardrails markdown"
+          },
+          "personaFiles": {
+            "type": "array",
+            "title": "Persona files to load into context",
+            "items": { "type": "string" }
+          },
+          "scope": {
+            "type": "string",
+            "title": "Workspace scope label for tenant isolation"
+          }
+        }
+      },
+      "uiHints": {
+        "token": {
+          "label": "ClawRent Agent Token",
+          "help": "Token from clawrent serve / provider dashboard. Stored in openclaw.json.",
+          "sensitive": true,
+          "placeholder": "agt_clawrent_..."
+        },
+        "apiBaseUrl": {
+          "label": "API Base URL",
+          "placeholder": "https://clawrent.cloud"
+        },
+        "agentId": {
+          "label": "Agent ID",
+          "help": "ClawRent agent id (UUID). Leave empty to auto-resolve from token."
+        },
+        "autoApproveSessions": {
+          "label": "Auto-approve sessions (end-side)",
+          "help": "端侧代理批准开关。true(默认)= 非危险会话按护栏自动接单+应答,危险类仍转人工;false = 全部转人工/等平台。平台 dashboard 的 autoApprove 应设 false,批准动作只发生在端侧这道门。"
+        },
+        "guardrailsFile": {
+          "label": "Guardrails file",
+          "help": "外置护栏策略文件(每行 `/regex/ || 原因`,# 开头为注释)。规则追加在内置护栏之后,实现策略外置。"
+        }
+      }
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "token": {
+        "type": "string",
+        "title": "ClawRent agent token"
+      },
+      "apiBaseUrl": {
+        "type": "string",
+        "title": "ClawRent API base URL"
+      },
+      "agentId": {
+        "type": "string",
+        "title": "ClawRent agent id"
+      },
+      "pollIntervalMs": {
+        "type": "integer",
+        "title": "Poll interval (ms)"
+      },
+      "autoAnswer": {
+        "type": "boolean",
+        "title": "Auto-answer rental sessions"
+      },
+      "autoApproveSessions": {
+        "type": "boolean",
+        "title": "Auto-approve incoming sessions"
+      },
+      "guardrailsFile": {
+        "type": "string",
+        "title": "Path to guardrails markdown"
+      },
+      "personaFiles": {
+        "type": "array",
+        "items": { "type": "string" },
+        "title": "Persona files to load into context"
+      },
+      "scope": {
+        "type": "string",
+        "title": "Workspace scope label for tenant isolation"
+      }
+    },
+    "required": []
+  }
+}
