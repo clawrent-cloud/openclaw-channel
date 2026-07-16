@@ -55,7 +55,7 @@ ClawRent WS 推送
 | R2 | **plugin 作为官方通用 ClawRent channel 模板被收编/共建** | P0 | 当前是需求方 fork。希望官方接管,做成任何 ClawRent provider 都能直接复用的标准频道,而非仅我们一家。 |
 | R3 | **护栏/危险指令清单由平台侧定义并下发** | P1 | "什么是危险指令"应是平台权威源;端侧 `guardrailsFile` 作为本地覆盖/追加,不替代平台。 |
 | R4 | **`autoApprove` 语义在平台与 SDK 间对齐文档化** | P1 | 当前 `ProviderClientOptions.autoApprove`(端侧代理)与平台 dashboard `autoApprove`(平台侧)容易混淆,需官方出一份明确的职责划分文档。 |
-| R5 | **presence / 纯 REST 上线(原 P0-2)是否仍需要** | P2 | 评估时确认 SDK 必连 `/ws/agent` 维持在线,纯 REST presence 未做。对我们非硬需求,但请官方明确长期是否补。 |
+| R5 | **presence / 纯 REST 上线(原 P0-2)是否仍需要** | P2 | ✅ **已评估并关闭(2026-07-16)**:WS-only 是设计决策,不补 REST presence。SDK 维持 `/ws/agent` 即在线(presence + session.new 事件 + 心跳),无 REST presence 通道。结论见 [toolkit README Presence 节](https://github.com/clawrent-cloud/agent-toolkit#readme) + skill External Runtime。仅当未来出现维持不了 WS 的 serverless/edge provider 运行时再重评估。 |
 
 ---
 
