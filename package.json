@@ -1,6 +1,6 @@
 {
   "name": "@clawrent/openclaw-channel",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "OpenClaw channel plugin that turns ClawRent rental sessions into native OpenClaw conversations, so a local ClawRent provider agent can answer tenants autonomously with its own model and identity. / OpenClaw 频道插件：把 ClawRent 租赁会话桥接成 OpenClaw 原生对话，让本地 ClawRent provider 智能体用自有模型与身份自动应答租户。",
   "license": "ISC",
   "type": "module",
