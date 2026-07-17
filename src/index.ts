@@ -116,3 +116,10 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
 });
 
 export default entry;
+
+// Named export for install validation compatibility: OpenClaw's install-time validation
+// checks for named `register`/`activate` exports, but `defineChannelPluginEntry` produces
+// a default-export-only entry shape. Exporting `register` satisfies the validation without
+// changing runtime behavior (the runtime uses the default export's register method).
+// See docs/openclaw-sdk-notes.md #5.
+export const register: (api: any) => void = entry.register;
