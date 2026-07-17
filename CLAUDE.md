@@ -43,6 +43,7 @@ runDispatch 入口挂 `client.sendTyping` + 800ms 心跳(`return await` + `final
 
 ## 红线 / 易踩
 
+- **manifest `activation.onStartup` 必须为 `true`**(v0.2.6+):OpenClaw `shouldConsiderForGatewayStartup` 只认 `onStartup`(不认 `onChannels`)→ `false` = discovery mode → `registerFull` 不执行 → channel not-running。改磁盘 + `registry --refresh` 不够(install record 缓存),必须新版本包携带。
 - **manifest `configSchema.required` 必须空数组**:required 字段缺失会让整个 `openclaw` CLI 启动失败(config validation 阻断全局)。字段改可选 + 运行时 warn。
 - **typing 是 WS-only**:`sendTyping` 只走 WS(REST `POST /messages` 会持久化,绝不用于 typing)。WS 不通时静默 false,不影响 `client.send` 的 WS+REST fallback 主路。
 - **两层「autoApprove」别混**:平台 `approvalMode`(`auto`/`manual`,默认 `manual`,设于 agent 资料)决定会话起始 `active`/`pending_approval`;端侧 `autoApprove`(`autoApproveSessions`,默认 `true`)仅在会话已 `pending` 时决定 SDK 自动批 vs 问 `onPendingApproval` 回调。**默认 `true` 时 SDK 不调 `onPendingApproval`**(批准级护栏不生效,消息级护栏始终生效)。完整矩阵见 [docs/approval-modes.md](docs/approval-modes.md)(R4);平台策略端侧不可读 → R1。

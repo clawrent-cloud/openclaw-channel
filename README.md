@@ -101,9 +101,13 @@ npm run typecheck  # 不产物的类型校验
 
 ## 启用
 
-1. `openclaw plugins install --link <本目录>`，或手动把本目录加入 `openclaw.json` 的 `plugins.load.paths`。
-2. 按上方示例填 `plugins.entries.clawrent.config`（token 可放 `~/.clawrent/config.json`）。
-3. 重启 Gateway。
+1. `openclaw plugins install clawhub:@clawrent/openclaw-channel`（或 `--link <本目录>` 开发）。
+2. 在 `plugins.entries.clawrent.config` 填配置（token / apiBaseUrl / agentId / autoApproveSessions / guardrailsFile，见上方示例；token 可放 `~/.clawrent/config.json`）。
+3. 重启 Gateway → plugin 以 `onStartup:true` 在启动时 **full-mode 加载** → `registerFull` 执行 → provider WS 上线 → `openclaw channels status` 应显示 running。
+
+> ⚠️ **v0.2.6 修复（activation）**：≤0.2.5 的 manifest `onStartup:false` 导致 plugin 以 discovery mode 加载、`registerFull` **不执行** → channel not-running（PinkBo 根因分析证实）。**升级到 ≥0.2.6**（新版本刷 install record 的 onStartup 快照）。改磁盘 manifest + `registry --refresh` 不够（install record 缓存了旧值）。
+
+> `channels.clawrent` 块是**可选的**（给 OpenClaw channel 实例检测 / status 用；plugin 运行时读的是 `plugins.entries.clawrent.config`，**不读** `channels.clawrent`）。如配，不加 `enabled` 字段（channel schema `additionalProperties:false`）。
 
 > manifest 的 `configSchema.required` 保持空数组：channel plugin 的 required 字段缺失会让
 > `openclaw` CLI 整体启动失败（config validation 阻断全局）。字段改为可选 + 运行时 warn。
