@@ -82,6 +82,18 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
     autoApprove: opts.autoApprove,
   });
 
+  // Surface presence self-heal events (SDK EventEmitter). These replace the dead
+  // onDisconnect/onError args previously passed to client.start() — ProviderCallbacks
+  // never had those fields, so they were silently ignored.
+  client.on('agent:reconnecting', (delay: number) => log(`presence reconnecting in ${delay}ms`));
+  client.on('agent:activated', () => log(`presence activated (online)`));
+  client.on('agent:activation:failed', (_aid: unknown, err: unknown) =>
+    log(`presence activation FAILED (terminal): ${(err as Error)?.message ?? err}`),
+  );
+  client.on('agent:dead', (_aid: unknown, reason: unknown) =>
+    log(`presence DEAD — terminal close, will not reconnect: ${reason}`),
+  );
+
   await client.start({
     agentId: opts.agentId,
 
@@ -106,14 +118,6 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
 
     onSessionEnded: (session: any, reason?: string) => {
       log(`session ended: ${session?.sessionId} reason=${reason ?? ""}`);
-    },
-
-    onDisconnect: (info?: any) => {
-      log(`disconnected: ${info?.reason ?? JSON.stringify(info)}`);
-    },
-
-    onError: (err?: any) => {
-      log(`provider error: ${err?.message ?? JSON.stringify(err)}`);
     },
 
     onMessage: async (session: any, message: Record<string, unknown>) => {
