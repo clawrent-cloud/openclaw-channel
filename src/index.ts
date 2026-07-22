@@ -14,6 +14,28 @@ import { testConnection } from "./setup/setup.js";
 
 const CHANNEL_ID = "clawrent";
 
+/**
+ * 模块级 provider 单例:同一进程内确保任何时刻只有一个 ProviderClient 连 /ws/agent。
+ *
+ * 背景:若 registerFull 被调用多次(OpenClaw 双加载 / startup 与 channel 双触发 /
+ * health-monitor restart 叠加),而每次都 `void startProvider(...)`,会叠加多个
+ * ProviderClient 用同一 agentToken 连 /ws/agent。后端 registerAgentClient 的语义是
+ * 「新连接 4009 踢旧连接」,provider 侧 4009 走「非终态 → 无限重连」—— 两个实例互相
+ * 踢、互相重连,形成稳态乒乓振荡(后端日志指纹:connected → ~350ms disconnected →
+ * 2~3s connected 循环;provider 侧表现为 `presence reconnecting in 1000ms` 高频循环)。
+ * 后果:presence 立不住 + reconnect 间隙漏接会话消息。
+ *
+ * 解法:用 chain 把所有 startProvider 串行化 —— 先干净停掉上一个实例(若有),再起新
+ * 实例。无论 registerFull 被调几次,任何时刻只有一个 ProviderClient 占着 /ws/agent,
+ * 4009 互踢消失。单实例下 provider 0.2.1+ 的自愈本就稳定(heartbeat 25s < 后端 40s 阈值,
+ * 不会被 heartbeat 断)。注意:这只能防「同进程内」双实例;若用户在同 token 上同时跑
+ * plugin 进程 + 另一个 provider(MCP start_serving / 第二个 OpenClaw 网关),仍会跨进程
+ * 互踢 —— 那是部署规范(同一 agent 同时只能一个 provider serve)。
+ */
+let providerChain: Promise<void> = Promise.resolve();
+let activeProvider: ProviderHandle | null = null;
+let shutdownRegistered = false;
+
 // Minimal setup adapter required by createChannelPluginBase.
 const setupAdapter = {
   async testConnection(cfg: any) {
@@ -80,35 +102,55 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
           ? runtime.config.current()
           : runtime?.cfg ?? {};
 
-      let handle: ProviderHandle | null = null;
+      // 串行化:先停上一个 provider 实例(幂等保护,防 registerFull 多次调用叠加多个
+      // ProviderClient → 4009 乒乓),再起新实例。任何时刻只有一个 ProviderClient 连
+      // /ws/agent(见模块级 providerChain 注释)。chain 排队也消除了「startProvider 异步
+      // 启动期间第二次 registerClean 进入」的竞态(那时 activeProvider 尚未赋值)。
+      const start = (): Promise<ProviderHandle | null> =>
+        startProvider({
+          agentToken: token,
+          apiBaseUrl,
+          wsUrl,
+          cursorPath,
+          agentId,
+          autoApprove,
+          guardrailsFile,
+          channelId: CHANNEL_ID,
+          accountId,
+          cfg,
+          deps: {
+            runChannelInboundEvent,
+            recordInboundSession: recordInboundSession as any,
+            dispatchReplyWithBufferedBlockDispatcher:
+              dispatchReplyWithBufferedBlockDispatcher as any,
+          },
+          onLog: (m) => ctx.logger?.info?.(`[clawrent] ${m}`),
+        }).catch((e) => {
+          ctx.logger?.error?.(`[clawrent] startProvider failed: ${String(e)}`);
+          return null;
+        });
 
-      void startProvider({
-        agentToken: token,
-        apiBaseUrl,
-        wsUrl,
-        cursorPath,
-        agentId,
-        autoApprove,
-        guardrailsFile,
-        channelId: CHANNEL_ID,
-        accountId,
-        cfg,
-        deps: {
-          runChannelInboundEvent,
-          recordInboundSession: recordInboundSession as any,
-          dispatchReplyWithBufferedBlockDispatcher:
-            dispatchReplyWithBufferedBlockDispatcher as any,
-        },
-        onLog: (m) => ctx.logger?.info?.(`[clawrent] ${m}`),
-      })
-        .then((h) => {
-          handle = h;
-        })
-        .catch((e) => ctx.logger?.error?.(`[clawrent] startProvider failed: ${String(e)}`));
-
-      ctx.registerShutdown?.(() => {
-        if (handle) void handle.stop();
+      providerChain = providerChain.then(async () => {
+        if (activeProvider) {
+          try { await activeProvider.stop(); } catch {}
+          activeProvider = null;
+        }
+        activeProvider = await start();
       });
+
+      // shutdown 只注册一次(多次 registerFull 不叠加 shutdown 回调);回调本身停当前
+      // activeProvider 并入队 chain,保证停的是最终存活的那个实例。
+      if (!shutdownRegistered) {
+        shutdownRegistered = true;
+        ctx.registerShutdown?.(() => {
+          providerChain = providerChain.then(async () => {
+            if (activeProvider) {
+              try { await activeProvider.stop(); } catch {}
+              activeProvider = null;
+            }
+          });
+        });
+      }
     } catch (e) {
       ctx.logger?.error?.(`[clawrent] registerFull threw: ${(e as any)?.stack ?? e}`);
     }
