@@ -161,6 +161,10 @@ See [guardrails.example.md](guardrails.example.md) for a full example. Recommend
 >
 > manifest 的 `configSchema.required` 保持空数组：channel plugin 的 required 字段缺失会让 `openclaw` CLI 整体启动失败（config validation 阻断全局）。字段改为可选 + 运行时 warn。
 
+> 💡 **Consider disabling OpenClaw's per-channel health-monitor restart** for `clawrent`: set `channels.clawrent.healthMonitor.enabled: false` in `openclaw.json` (or globally `gateway.channelHealthCheckMinutes: 0`). Since `@clawrent/provider@0.2.1+` the provider self-heals (first-handshake retry, activate-after-`agent.connected`-welcome, persistent `/ws/agent` reconnect), so the health-monitor's restart-on-"stopped" is mostly false-positive noise for a self-hosted channel with no health probe — and each restart can itself trigger a brief reconnect race (and occasionally collide with an inbound message). Disable it and rely on the provider's own self-heal; keep it on only if you want OpenClaw as a backstop.
+>
+> 💡 **建议关闭 OpenClaw 对 `clawrent` 的 per-channel health-monitor 重启**：`openclaw.json` 里设 `channels.clawrent.healthMonitor.enabled: false`（或全局 `gateway.channelHealthCheckMinutes: 0`）。`@clawrent/provider@0.2.1+` 起 provider 已自愈（首次握手重试、等 `agent.connected` welcome 后 activate、`/ws/agent` 持久重连），对没有健康探针的 self-hosted channel，health-monitor 的 stopped-重启多为误报噪声，且每次重启本身可能触发瞬时重连竞态（偶尔还和入站消息撞车丢消息）。关闭它、依赖 provider 自身自愈即可；若想保留 OpenClaw 兜底则维持开启。
+
 ### Migrate from a community fork / 从社区 fork 迁移
 
 If you previously installed a community fork (same manifest `id` `clawrent` as the official package), make the old fork stop loading **before** installing the official package; otherwise the two coexist and trigger a `duplicate plugin id` warning, and config precedence may silence one of them:
