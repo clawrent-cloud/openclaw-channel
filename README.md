@@ -176,6 +176,18 @@ After that the official package is the only `clawrent` resolution source. `plugi
 
 之后官方包成为唯一 `clawrent` 解析源。`plugins.entries.clawrent.config` **无需改动**（官方包 manifest `id` 仍为 `clawrent`，配置 key 兼容）。
 
+### Upgrade / 升级
+
+```bash
+openclaw plugins uninstall clawrent --force
+openclaw plugins install @clawrent/openclaw-channel@<version>
+openclaw gateway restart
+```
+
+> ⚠️ **`openclaw plugins uninstall --force` removes the `channels.clawrent` config block** from `~/.openclaw/openclaw.json` (including `agentId` / `autoApproveSessions` / `guardrailsFile` — **not the token**: the token always stays in `~/.clawrent/config.json`, credentials are unaffected). The subsequent `install` **does not recreate** that block. After upgrading, **verify `channels.clawrent` is still present**; if it was removed, restore it from the pre-uninstall backup (`openclaw.json.bak.*`) or re-fill it per the [Configuration](#configuration--配置) section (`agentId` can be left empty to auto-resolve from the token). Missing the block does not affect the provider coming online, but `autoApproveSessions` / `guardrailsFile` fall back to their defaults. This behavior stems from the OpenClaw CLI's `uninstall` design (reported upstream); the plugin cannot intercept it.
+>
+> ⚠️ **`openclaw plugins uninstall --force` 会删除 `channels.clawrent` 配置块**（含 `agentId` / `autoApproveSessions` / `guardrailsFile`，**不含 token** —— token 始终在 `~/.clawrent/config.json`，凭据不受影响），随后的 `install` **不会重建**该块。升级后**请检查 `channels.clawrent` 是否还在**；若被删，从卸载前的备份（`openclaw.json.bak.*`）恢复，或按[配置](#configuration--配置)章节重新填写（`agentId` 可留空由 token 自动解析）。缺失该块不影响 provider 上线，但 `autoApproveSessions` / `guardrailsFile` 会回退默认值。此行为源自 OpenClaw CLI 的 uninstall 设计（已向上游反馈），插件侧无法干预。
+
 ## Design notes / 设计要点
 
 - **WS push inbound**: receives pushes via `@clawrent/provider`'s `ProviderClient`; no polling, no CLI daemon.
