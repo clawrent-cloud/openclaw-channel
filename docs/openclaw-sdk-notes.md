@@ -18,7 +18,7 @@
 | `defineSetupPluginEntry` | 未强调 | 存在于 `channel-core`，供独立 setup-entry 使用 |
 | manifest `configSchema.required` | 示例多为可选 | 若把字段标 `required` 且 `plugins.entries.<id>.config` 未填，**整个 openclaw CLI 启动失败**（config validation 阻断全局）。应改为可选 + 运行时 warn |
 | `plugins install --link` | 开发期 link | 会尝试改写 `openclaw.json` 增加 `plugins.entries.<id>`；若写入导致 size-drop 过大，OpenClaw 拒绝写入并生成 `.rejected` 备份（安全机制，主文件不破坏） |
-| install 入口校验 | — | 报 `missing register/activate export` 与 `channelConfigs` 警告，即使使用 `defineChannelPluginEntry` 默认导出。install 校验与 defineChannelPluginEntry 约定存在偏差 |
+| install 入口校验 | — | 报 `missing register/activate export` 与 `channelConfigs` 警告，即使使用 `defineChannelPluginEntry` 默认导出。install 校验与 defineChannelPluginEntry 约定存在偏差（**2026.7.1 已修，见下方问题清单 #5**） |
 
 ---
 
@@ -41,6 +41,10 @@
 5. **`plugins install --link` 的入口校验与 `defineChannelPluginEntry` 不一致**：
    install 报 `missing register/activate export`，但 `defineChannelPluginEntry` 的
    返回值已含 `register`。建议统一 install 校验逻辑，或文档说明入口文件的导出约定。
+   **✅ 已修复（OpenClaw 2026.7.1）**：`resolvePluginModuleExport`（loader.ts:295）已
+   normalize default / module-wrapper 导出，接受 register/activate；PinkBo 在 2026.7.1-2
+   复测 `onStartup:true` + `defineChannelPluginEntry`（含纯 default-export 变体）干净加载、
+   不复现（openclaw/openclaw#111344 关闭为 "already implemented"）。
 6. **`channelConfigs` manifest 字段文档不足**：install 警告
    "channel plugin manifest declares clawrent without channelConfigs metadata"，
    但 manifest 已声明 `channelConfigs`。需明确该字段的精确期望结构。

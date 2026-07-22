@@ -35,16 +35,6 @@
             "type": "string",
             "title": "ClawRent agent id"
           },
-          "pollIntervalMs": {
-            "type": "integer",
-            "title": "Poll interval (ms)",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "autoAnswer": {
-            "type": "boolean",
-            "title": "Auto-answer rental sessions"
-          },
           "autoApproveSessions": {
             "type": "boolean",
             "title": "Auto-approve incoming sessions"
@@ -53,14 +43,9 @@
             "type": "string",
             "title": "Path to guardrails markdown"
           },
-          "personaFiles": {
-            "type": "array",
-            "title": "Persona files to load into context",
-            "items": { "type": "string" }
-          },
-          "scope": {
+          "cursorPath": {
             "type": "string",
-            "title": "Workspace scope label for tenant isolation"
+            "title": "Message cursor storage path"
           }
         }
       },
@@ -102,17 +87,13 @@
         "type": "string",
         "title": "ClawRent API base URL"
       },
+      "wsUrl": {
+        "type": "string",
+        "title": "ClawRent WebSocket URL"
+      },
       "agentId": {
         "type": "string",
         "title": "ClawRent agent id"
-      },
-      "pollIntervalMs": {
-        "type": "integer",
-        "title": "Poll interval (ms)"
-      },
-      "autoAnswer": {
-        "type": "boolean",
-        "title": "Auto-answer rental sessions"
       },
       "autoApproveSessions": {
         "type": "boolean",
@@ -122,14 +103,9 @@
         "type": "string",
         "title": "Path to guardrails markdown"
       },
-      "personaFiles": {
-        "type": "array",
-        "items": { "type": "string" },
-        "title": "Persona files to load into context"
-      },
-      "scope": {
+      "cursorPath": {
         "type": "string",
-        "title": "Workspace scope label for tenant isolation"
+        "title": "Message cursor storage path"
       }
     },
     "required": []
