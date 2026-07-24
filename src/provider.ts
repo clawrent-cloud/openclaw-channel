@@ -18,6 +18,8 @@
 //   - runChannelInboundEvent                   ← openclaw/plugin-sdk/channel-inbound
 
 import { checkGuardrails, loadGuardrails } from "./guardrails.js";
+import { shouldWakeAgent, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
+import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 
 export interface ProviderRuntimeDeps {
   runChannelInboundEvent: (params: any) => Promise<any>;
@@ -38,6 +40,8 @@ export interface StartProviderOptions {
   cfg: any; // OpenClawConfig(从 runtime 取)
   deps: ProviderRuntimeDeps;
   onLog?: (msg: string) => void;
+  /** Plan 4b: opt into /ws/group (participant-scoped) instead of /ws/session. */
+  useGroupChannel: boolean;
 }
 
 export interface ProviderHandle {
@@ -80,6 +84,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
     ...(opts.wsUrl ? { wsUrl: opts.wsUrl } : {}),
     cursorStore: new FileCursorStore(opts.cursorPath),
     autoApprove: opts.autoApprove,
+    useGroupChannel: opts.useGroupChannel,
   });
 
   // Surface presence self-heal events (SDK EventEmitter). These replace the dead
@@ -93,6 +98,21 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
   client.on('agent:dead', (_aid: unknown, reason: unknown) =>
     log(`presence DEAD — terminal close, will not reconnect: ${reason}`),
   );
+
+  // Plan 4b-2.3: capture per-session model token usage from OpenClaw diagnostics so
+  // outbound replies can carry payload.usage.totalTokens for per_token metering.
+  // Best-effort — if OpenClaw doesn't tag model.usage with a clawrent sessionKey the
+  // cache stays empty and totalTokens is omitted (backend skips → backward compatible).
+  const usageBySession = new Map<string, number>();
+  const unsubDiagnostic = onDiagnosticEvent((evt) => {
+    if (evt.type !== 'model.usage') return;
+    const sid =
+      sessionIdFromKey(evt.sessionKey) ??
+      (evt.channel === CHANNEL ? evt.sessionId : undefined);
+    if (typeof sid !== 'string') return;
+    const total = computeUsageTotal(evt.usage);
+    if (total > 0) usageBySession.set(sid, total);
+  });
 
   await client.start({
     agentId: opts.agentId,
@@ -134,6 +154,13 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       }
       if (!content.trim()) {
         log(`skip empty content session=${sessionId}`);
+        return;
+      }
+
+      // Plan 4b-2.2: @-routing — only wake when this agent is addressed (spec §6.3).
+      // /ws/session mode (no mentions, no participantId) always wakes (unchanged).
+      if (!shouldWakeAgent(session?.participantId, message)) {
+        log(`skip not-@-ed session=${sessionId} (mentions do not include this agent)`);
         return;
       }
 
@@ -210,11 +237,17 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
                         const replyText: string =
                           payload?.text ?? payload?.content ?? "";
                         if (!replyText.trim()) return;
+                        // Plan 4b-2.3: attach captured per_token usage (if any) so the
+                        // backend accumulates participant.totalTokens for this reply.
+                        const capturedUsage = usageBySession.get(sessionId);
                         await client.send(sessionId, {
                           type: "dialogue.message",
-                          payload: { content: replyText },
+                          payload: {
+                            content: replyText,
+                            ...(capturedUsage ? { usage: { totalTokens: capturedUsage } } : {}),
+                          },
                         });
-                        log(`replied session=${sessionId} (${replyText.length} chars)`);
+                        log(`replied session=${sessionId} (${replyText.length} chars${capturedUsage ? `, ${capturedUsage} tokens` : ""})`);
                       },
                       // 模型跑失败时,把错误回发给租户(不静默),便于人工发现。
                       onError: async (err: any) => {
@@ -247,6 +280,11 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
 
   return {
     stop: () => {
+      try {
+        unsubDiagnostic();
+      } catch {
+        /* diagnostic unsubscribe best-effort */
+      }
       try {
         client.stop();
       } catch (e) {

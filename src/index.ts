@@ -15,25 +15,27 @@ import { testConnection } from "./setup/setup.js";
 const CHANNEL_ID = "clawrent";
 
 /**
- * 模块级 provider 单例:同一进程内确保任何时刻只有一个 ProviderClient 连 /ws/agent。
+ * 模块级 provider 注册表:每个 agentId 一条串行化 chain + 一个 ProviderHandle,
+ * 确保同一 agent 任何时刻只有一个 ProviderClient 连 /ws/agent(或 /ws/group)。
  *
  * 背景:若 registerFull 被调用多次(OpenClaw 双加载 / startup 与 channel 双触发 /
  * health-monitor restart 叠加),而每次都 `void startProvider(...)`,会叠加多个
- * ProviderClient 用同一 agentToken 连 /ws/agent。后端 registerAgentClient 的语义是
+ * ProviderClient 用同一 agentToken 连。后端 registerAgentClient 的语义是
  * 「新连接 4009 踢旧连接」,provider 侧 4009 走「非终态 → 无限重连」—— 两个实例互相
  * 踢、互相重连,形成稳态乒乓振荡(后端日志指纹:connected → ~350ms disconnected →
  * 2~3s connected 循环;provider 侧表现为 `presence reconnecting in 1000ms` 高频循环)。
  * 后果:presence 立不住 + reconnect 间隙漏接会话消息。
  *
- * 解法:用 chain 把所有 startProvider 串行化 —— 先干净停掉上一个实例(若有),再起新
- * 实例。无论 registerFull 被调几次,任何时刻只有一个 ProviderClient 占着 /ws/agent,
- * 4009 互踢消失。单实例下 provider 0.2.1+ 的自愈本就稳定(heartbeat 25s < 后端 40s 阈值,
- * 不会被 heartbeat 断)。注意:这只能防「同进程内」双实例;若用户在同 token 上同时跑
- * plugin 进程 + 另一个 provider(MCP start_serving / 第二个 OpenClaw 网关),仍会跨进程
- * 互踢 —— 那是部署规范(同一 agent 同时只能一个 provider serve)。
+ * 解法:按 agentId 分链(chain Map),每条链把该 agent 的 startProvider 串行化 ——
+ * 先干净停掉该 agent 的上一个实例(若有),再起新实例。无论 registerFull 调几次,
+ * 每个 agentId 任何时刻只有一个 ProviderClient 占着连接,4009 互踢消失。
+ * 不同 agent 持不同 agentToken,彼此不会 4009 互踢(可安全共驻,spec §6.4)。
+ * 单实例下 provider 0.3.0+ 的自愈稳定(heartbeat 25s < 后端 40s 阈值)。
+ * 注意:这只能防「同进程内」同 agent 双实例;跨进程(同 token 跑 plugin + MCP
+ * start_serving / 第二个网关)仍会互踢 —— 那是部署规范(同一 agent 同时只一个 provider serve)。
  */
-let providerChain: Promise<void> = Promise.resolve();
-let activeProvider: ProviderHandle | null = null;
+const providerChains = new Map<string, Promise<void>>();
+const activeProviders = new Map<string, ProviderHandle>();
 let shutdownRegistered = false;
 
 // Minimal setup adapter required by createChannelPluginBase.
@@ -69,86 +71,133 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
   registerFull(ctx: any) {
     try {
       const config = ctx.config ?? {};
-      // token 优先取 openclaw 配置;缺失时回退读 ~/.clawrent/config.json,避免密钥写入 openclaw.json。
-      let token: string | undefined = config.token;
-      if (!token) {
-        try {
-          const crPath = path.join(homedir(), ".clawrent", "config.json");
-          let raw = readFileSync(crPath, "utf8");
-          if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1); // strip BOM
-          const cr = JSON.parse(raw);
-          token = (cr as any).token ?? (cr as any).agentToken;
-        } catch (e) {
-          ctx.logger?.warn?.(`[clawrent] token fallback read failed: ${(e as any)?.message ?? e}`);
+      // Plan 4b: /ws/group participant-scoped channel is the default. Set false to
+      // fall back to legacy /ws/session (e.g. before the server auto-provisions the
+      // provider-agent participant — Plan 4b Part A — else new sessions reject 4013).
+      const useGroupChannel: boolean = config.useGroupChannel ?? true;
+
+      // --- resolve the agents to serve (multi-agent array, else single token) ---
+      // multi: config.agents:[{agentId,token}] → one ProviderClient per agent.
+      // single: config.token (+ optional config.agentId), with ~/.clawrent/config.json
+      // fallback so secrets need not live in openclaw.json.
+      const resolveSingleToken = (): string | undefined => {
+        let token: string | undefined = config.token;
+        if (!token) {
+          try {
+            const crPath = path.join(homedir(), ".clawrent", "config.json");
+            let raw = readFileSync(crPath, "utf8");
+            if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1); // strip BOM
+            const cr = JSON.parse(raw);
+            token = (cr as any).token ?? (cr as any).agentToken;
+          } catch (e) {
+            ctx.logger?.warn?.(`[clawrent] token fallback read failed: ${(e as any)?.message ?? e}`);
+          }
         }
+        return token;
+      };
+
+      type AgentEntry = { agentId?: string; token: string };
+      let entries: AgentEntry[];
+      if (Array.isArray(config.agents) && config.agents.length > 0) {
+        entries = (config.agents as any[])
+          .filter((a) => a && typeof a.token === "string" && a.token)
+          .map((a) => ({
+            agentId: typeof a.agentId === "string" ? a.agentId : undefined,
+            token: a.token as string,
+          }));
+        if (entries.length === 0) {
+          ctx.logger?.warn?.("[clawrent] agents array configured but has no valid entries; channel inactive");
+          return;
+        }
+      } else {
+        const token = resolveSingleToken();
+        if (!token) {
+          ctx.logger?.warn?.("[clawrent] no token configured; channel inactive");
+          return;
+        }
+        entries = [{ agentId: config.agentId, token }];
       }
-      if (!token) {
-        ctx.logger?.warn?.("[clawrent] no token configured; channel inactive");
-        return;
-      }
+
       const apiBaseUrl: string | undefined = config.apiBaseUrl;
       const wsUrl: string | undefined = config.wsUrl;
-      const agentId: string | undefined = config.agentId;
       const autoApprove: boolean = config.autoApproveSessions ?? true;
       const guardrailsFile: string | undefined = config.guardrailsFile;
-      const accountId = agentId ?? "clawrent-provider";
-      const cursorPath: string =
-        config.cursorPath ??
-        path.join(homedir(), ".clawrent", "openclaw-provider-cursor.json");
+      const baseCursorPath: string =
+        config.cursorPath ?? path.join(homedir(), ".clawrent", "openclaw-provider-cursor.json");
 
       const runtime = ctx.runtime;
-      const cfg =
+      const cfg: any =
         typeof runtime?.config?.current === "function"
           ? runtime.config.current()
           : runtime?.cfg ?? {};
 
-      // 串行化:先停上一个 provider 实例(幂等保护,防 registerFull 多次调用叠加多个
-      // ProviderClient → 4009 乒乓),再起新实例。任何时刻只有一个 ProviderClient 连
-      // /ws/agent(见模块级 providerChain 注释)。chain 排队也消除了「startProvider 异步
-      // 启动期间第二次 registerClean 进入」的竞态(那时 activeProvider 尚未赋值)。
-      const start = (): Promise<ProviderHandle | null> =>
-        startProvider({
-          agentToken: token,
-          apiBaseUrl,
-          wsUrl,
-          cursorPath,
-          agentId,
-          autoApprove,
-          guardrailsFile,
-          channelId: CHANNEL_ID,
-          accountId,
-          cfg,
-          deps: {
-            runChannelInboundEvent,
-            recordInboundSession: recordInboundSession as any,
-            dispatchReplyWithBufferedBlockDispatcher:
-              dispatchReplyWithBufferedBlockDispatcher as any,
-          },
-          onLog: (m) => ctx.logger?.info?.(`[clawrent] ${m}`),
-        }).catch((e) => {
-          ctx.logger?.error?.(`[clawrent] startProvider failed: ${String(e)}`);
-          return null;
-        });
+      // (Re)start one ProviderClient per agent, each on its OWN per-agentId chain so the
+      // same agent never has two concurrent clients (4009 protection; see module doc).
+      // Different agents use different tokens and never 4009 each other (spec §6.4).
+      for (const entry of entries) {
+        const agentKey = entry.agentId ?? "default";
+        // per-agent cursor file when serving multiple agents (independent dedupe state)
+        const cursorPath = entries.length > 1 ? `${baseCursorPath}.${agentKey}` : baseCursorPath;
+        const accountId = entry.agentId ?? "clawrent-provider";
 
-      providerChain = providerChain.then(async () => {
-        if (activeProvider) {
-          try { await activeProvider.stop(); } catch {}
-          activeProvider = null;
-        }
-        activeProvider = await start();
-      });
+        const start = (): Promise<ProviderHandle | null> =>
+          startProvider({
+            agentToken: entry.token,
+            apiBaseUrl,
+            wsUrl,
+            cursorPath,
+            agentId: entry.agentId,
+            autoApprove,
+            guardrailsFile,
+            channelId: CHANNEL_ID,
+            accountId,
+            cfg,
+            deps: {
+              runChannelInboundEvent,
+              recordInboundSession: recordInboundSession as any,
+              dispatchReplyWithBufferedBlockDispatcher:
+                dispatchReplyWithBufferedBlockDispatcher as any,
+            },
+            onLog: (m) => ctx.logger?.info?.(`[clawrent] ${m}`),
+            useGroupChannel,
+          }).catch((e) => {
+            ctx.logger?.error?.(`[clawrent] startProvider failed (agent=${agentKey}): ${String(e)}`);
+            return null;
+          });
 
-      // shutdown 只注册一次(多次 registerFull 不叠加 shutdown 回调);回调本身停当前
-      // activeProvider 并入队 chain,保证停的是最终存活的那个实例。
+        const prevChain = providerChains.get(agentKey) ?? Promise.resolve();
+        providerChains.set(
+          agentKey,
+          prevChain.then(async () => {
+            const prev = activeProviders.get(agentKey);
+            if (prev) {
+              try { await prev.stop(); } catch {}
+              activeProviders.delete(agentKey);
+            }
+            const handle = await start();
+            if (handle) activeProviders.set(agentKey, handle);
+          }),
+        );
+      }
+
+      // shutdown 只注册一次(多次 registerFull 不叠加);停掉所有 active provider,每个走自己的 chain,
+      // 保证停的是最终存活的实例。
       if (!shutdownRegistered) {
         shutdownRegistered = true;
         ctx.registerShutdown?.(() => {
-          providerChain = providerChain.then(async () => {
-            if (activeProvider) {
-              try { await activeProvider.stop(); } catch {}
-              activeProvider = null;
-            }
-          });
+          for (const key of Array.from(providerChains.keys())) {
+            const prev = providerChains.get(key) ?? Promise.resolve();
+            providerChains.set(
+              key,
+              prev.then(async () => {
+                const h = activeProviders.get(key);
+                if (h) {
+                  try { await h.stop(); } catch {}
+                  activeProviders.delete(key);
+                }
+              }),
+            );
+          }
         });
       }
     } catch (e) {
