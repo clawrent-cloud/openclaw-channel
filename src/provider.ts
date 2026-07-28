@@ -98,6 +98,16 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
   client.on('agent:dead', (_aid: unknown, reason: unknown) =>
     log(`presence DEAD — terminal close, will not reconnect: ${reason}`),
   );
+  // Phase 3: pause/resume observability (ProviderClient 0.4.0 emits these).
+  // Pause = consumer paused this agent (4020 close, no reconnect); resume = consumer
+  // resumed → ProviderClient reconnects /ws/group. The agent simply goes idle while
+  // paused (no inbound messages arrive) — no extra plugin-side gating needed.
+  client.on('session:paused', (sid: string, reason: unknown) =>
+    log(`session PAUSED sid=${sid} (consumer paused this agent; will not reconnect until resumed): ${reason}`),
+  );
+  client.on('session:resumed', (sid: string) =>
+    log(`session RESUMED sid=${sid} — reconnecting /ws/group`),
+  );
 
   // Plan 4b-2.3: capture per-session model token usage from OpenClaw diagnostics so
   // outbound replies can carry payload.usage.totalTokens for per_token metering.
