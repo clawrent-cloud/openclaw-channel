@@ -17,7 +17,7 @@
 //   - dispatchReplyWithBufferedBlockDispatcher ← openclaw/plugin-sdk/reply-dispatch-runtime
 //   - runChannelInboundEvent                   ← openclaw/plugin-sdk/channel-inbound
 
-import { checkGuardrails, loadGuardrails, prefilter } from "./guardrails.js";
+import { checkGuardrails, loadGuardrails, prefilter, phase1Triage } from "./guardrails.js";
 import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 
@@ -42,6 +42,9 @@ export interface StartProviderOptions {
   onLog?: (msg: string) => void;
   /** Plan 4b: opt into /ws/group (participant-scoped) instead of /ws/session. */
   useGroupChannel: boolean;
+  /** D3: triage switches. prefilter default on; twoPhase default off. */
+  triagePrefilter?: boolean;
+  triageTwoPhase?: boolean;
 }
 
 export interface ProviderHandle {
@@ -171,11 +174,21 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       // @ is now CONTEXT (addressedToMe), threaded to the agent via UntrustedStructuredContext (D2).
       const addressedToMe = isAddressedToMe(session?.participantId, message);
 
-      // D2: prefilter — silent-drop obvious garbage (no reply, no warning).
-      const pre = prefilter(content);
-      if (pre.drop) {
-        log(`prefilter drop session=${sessionId}: ${pre.reason}`);
-        return;
+      // D2 prefilter (D3: gated by triagePrefilter, default on) — silent-drop garbage.
+      if (opts.triagePrefilter !== false) {
+        const pre = prefilter(content);
+        if (pre.drop) {
+          log(`prefilter drop session=${sessionId}: ${pre.reason}`);
+          return;
+        }
+      }
+      // D3 phase-1 (default off via triageTwoPhase) — cheap pre-screen before full dispatch.
+      if (opts.triageTwoPhase) {
+        const p1 = phase1Triage(content);
+        if (p1.skip) {
+          log(`phase-1 skip session=${sessionId}: ${p1.reason}`);
+          return;
+        }
       }
 
       // 护栏:危险指令直接拦截,不驱动 agent。

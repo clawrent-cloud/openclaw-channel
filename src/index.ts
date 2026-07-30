@@ -75,6 +75,9 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
       // fall back to legacy /ws/session (e.g. before the server auto-provisions the
       // provider-agent participant — Plan 4b Part A — else new sessions reject 4013).
       const useGroupChannel: boolean = config.useGroupChannel ?? true;
+      // D3: triage switches (optional; prefilter defaults on at the provider, twoPhase off).
+      const triagePrefilter: boolean | undefined = config.triagePrefilter;
+      const triageTwoPhase: boolean | undefined = config.triageTwoPhase;
 
       // --- resolve the agents to serve (multi-agent array, else single token) ---
       // multi: config.agents:[{agentId,token}] → one ProviderClient per agent.
@@ -160,6 +163,8 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
             },
             onLog: (m) => ctx.logger?.info?.(`[clawrent] ${m}`),
             useGroupChannel,
+            triagePrefilter,
+            triageTwoPhase,
           }).catch((e) => {
             ctx.logger?.error?.(`[clawrent] startProvider failed (agent=${agentKey}): ${String(e)}`);
             return null;

@@ -68,3 +68,16 @@ export function prefilter(text: string): GuardrailResult {
   }
   return { blocked: false, drop: false };
 }
+
+/**
+ * D3 phase-1 triage (default OFF, gated by `triageTwoPhase` config): cheap rule-based
+ * pre-screen BEFORE the full guardrail + dispatch. Returns {skip} to silent-drop what's
+ * clearly not worth a full turn. Conservative; twoPhase is off by default so this only
+ * runs when explicitly enabled.
+ */
+export function phase1Triage(text: string): { skip: boolean; reason?: string } {
+  const pre = prefilter(text);
+  if (pre.drop) return { skip: true, reason: pre.reason };
+  if (text.trim().length < 2) return { skip: true, reason: "content too short for a turn" };
+  return { skip: false };
+}

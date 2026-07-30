@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkGuardrails, prefilter } from "./guardrails.js";
+import { checkGuardrails, prefilter, phase1Triage } from "./guardrails.js";
 
 describe("prefilter (D2 silent-drop)", () => {
   it("drops content with no alphanumeric/CJK (pure symbols / whitespace / emoji)", () => {
@@ -31,5 +31,22 @@ describe("checkGuardrails", () => {
 
   it("passes normal dialogue", () => {
     expect(checkGuardrails("hello there").blocked).toBe(false);
+  });
+});
+
+describe("phase1Triage (D3, default off)", () => {
+  it("skips noise (no alnum/CJK)", () => {
+    expect(phase1Triage("!!!").skip).toBe(true);
+  });
+
+  it("skips over-short content (< 2 chars after trim)", () => {
+    expect(phase1Triage("a").skip).toBe(true);
+    expect(phase1Triage(" ").skip).toBe(true);
+  });
+
+  it("passes normal content (>= 2 chars, has alnum/CJK)", () => {
+    expect(phase1Triage("hi").skip).toBe(false);
+    expect(phase1Triage("hello there").skip).toBe(false);
+    expect(phase1Triage("你好世界").skip).toBe(false);
   });
 });

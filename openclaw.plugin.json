@@ -52,6 +52,16 @@
             "title": "Use /ws/group participant-scoped channel (Plan 4b)",
             "description": "true (default) = connect /ws/group (participant-scoped, @-routing, per_token usage). false = legacy /ws/session (fallback). Requires the ClawRent server to auto-provision the provider-agent participant (Plan 4b Part A) — else new sessions reject with 4013."
           },
+          "triagePrefilter": {
+            "type": "boolean",
+            "title": "Triage: prefilter silent-drop",
+            "description": "true (default) = silent-drop obvious garbage (no alphanumeric/CJK) before driving the agent. false = pass everything through."
+          },
+          "triageTwoPhase": {
+            "type": "boolean",
+            "title": "Triage: two-phase pre-screen",
+            "description": "false (default). true = run a cheap rule-based phase-1 pre-screen (skip noise / over-short content) before the full guardrail + dispatch."
+          },
           "agents": {
             "type": "array",
             "title": "Multiple provider agents (multi-agent mode)",
@@ -89,6 +99,14 @@
         "guardrailsFile": {
           "label": "Guardrails file",
           "help": "外置护栏策略文件(每行 `/regex/ || 原因`,# 开头为注释)。规则追加在内置护栏之后,实现策略外置。"
+        },
+        "triagePrefilter": {
+          "label": "Triage: prefilter (silent-drop)",
+          "help": "默认开。静默丢弃明显垃圾内容(无字母/数字/中文,纯符号/空白)。关闭则全部放行。"
+        },
+        "triageTwoPhase": {
+          "label": "Triage: two-phase pre-screen",
+          "help": "默认关。开启后在完整护栏+派发前加一道廉价规则预筛(跳过噪音/过短内容)。"
         }
       }
     }
@@ -128,6 +146,14 @@
       "useGroupChannel": {
         "type": "boolean",
         "title": "Use /ws/group participant-scoped channel (Plan 4b)"
+      },
+      "triagePrefilter": {
+        "type": "boolean",
+        "title": "Triage: prefilter silent-drop"
+      },
+      "triageTwoPhase": {
+        "type": "boolean",
+        "title": "Triage: two-phase pre-screen"
       },
       "agents": {
         "type": "array",
