@@ -1,28 +1,28 @@
 import { describe, it, expect } from "vitest";
-import { shouldWakeAgent, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
+import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
 
-describe("shouldWakeAgent (@-routing, Plan 4b-2.2)", () => {
-  it("wakes when there are no mentions (backward compat / single-agent)", () => {
-    expect(shouldWakeAgent("part-1", { type: "dialogue.message" })).toBe(true);
-    expect(shouldWakeAgent(undefined, { type: "dialogue.message" })).toBe(true);
+describe("isAddressedToMe (D1: @ context, was @-gate)", () => {
+  it("true when there are no mentions (backward compat / single-agent)", () => {
+    expect(isAddressedToMe("part-1", { type: "dialogue.message" })).toBe(true);
+    expect(isAddressedToMe(undefined, { type: "dialogue.message" })).toBe(true);
   });
 
-  it("wakes when mentioned (my participantId is in mentions)", () => {
-    expect(shouldWakeAgent("part-1", { mentions: ["part-1"] })).toBe(true);
-    expect(shouldWakeAgent("part-1", { mentions: ["part-2", "part-1"] })).toBe(true);
+  it("true when mentioned (my participantId is in mentions)", () => {
+    expect(isAddressedToMe("part-1", { mentions: ["part-1"] })).toBe(true);
+    expect(isAddressedToMe("part-1", { mentions: ["part-2", "part-1"] })).toBe(true);
   });
 
-  it("stays silent when someone else is mentioned", () => {
-    expect(shouldWakeAgent("part-1", { mentions: ["part-2"] })).toBe(false);
+  it("false when someone else is mentioned", () => {
+    expect(isAddressedToMe("part-1", { mentions: ["part-2"] })).toBe(false);
   });
 
-  it("stays silent when mentioned but my participantId is unknown (handshake not cached)", () => {
-    expect(shouldWakeAgent(undefined, { mentions: ["part-2"] })).toBe(false);
+  it("false when mentioned but my participantId is unknown (handshake not cached)", () => {
+    expect(isAddressedToMe(undefined, { mentions: ["part-2"] })).toBe(false);
   });
 
-  it("ignores non-array mentions (treats as no mentions → wake)", () => {
-    expect(shouldWakeAgent("part-1", { mentions: "part-1" })).toBe(true);
-    expect(shouldWakeAgent("part-1", { mentions: null })).toBe(true);
+  it("ignores non-array mentions (treats as no mentions → true)", () => {
+    expect(isAddressedToMe("part-1", { mentions: "part-1" })).toBe(true);
+    expect(isAddressedToMe("part-1", { mentions: null })).toBe(true);
   });
 });
 

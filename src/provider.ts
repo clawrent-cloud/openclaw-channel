@@ -18,7 +18,7 @@
 //   - runChannelInboundEvent                   ← openclaw/plugin-sdk/channel-inbound
 
 import { checkGuardrails, loadGuardrails } from "./guardrails.js";
-import { shouldWakeAgent, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
+import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 
 export interface ProviderRuntimeDeps {
@@ -167,12 +167,9 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         return;
       }
 
-      // Plan 4b-2.2: @-routing — only wake when this agent is addressed (spec §6.3).
-      // /ws/session mode (no mentions, no participantId) always wakes (unchanged).
-      if (!shouldWakeAgent(session?.participantId, message)) {
-        log(`skip not-@-ed session=${sessionId} (mentions do not include this agent)`);
-        return;
-      }
+      // D1: @-gate removed — agent self-decides whether to reply (prompt-based).
+      // @ is now CONTEXT (addressedToMe), threaded to the agent via UntrustedStructuredContext (D2).
+      const addressedToMe = isAddressedToMe(session?.participantId, message);
 
       // 护栏:危险指令直接拦截,不驱动 agent。
       const guard = checkGuardrails(content);

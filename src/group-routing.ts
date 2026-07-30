@@ -3,20 +3,19 @@
 // Kept dependency-free + side-effect-free so the @-routing and token-usage logic
 // can be unit-tested without standing up an OpenClaw runtime or a live WS server.
 
-/** @-routing policy (spec §6.3 + Plan 4b-2.2).
+/** Is this provider agent @-addressed by the inbound group message? (D1: was a
+ *  wake/sleep GATE — now CONTEXT only; the agent self-decides whether to reply.)
  *
- * Decides whether THIS provider agent should wake (drive the OpenClaw bot) for an
- * inbound group message:
- *  - No `mentions` → wake. Backward-compatible with the single-agent /ws/session
- *    plugin (where every consumer message is answered). Also the sensible default
- *    when a session has a single provider agent.
- *  - `mentions` present → wake ONLY if this agent's participantId is in the list.
- *    Non-@-ed agents stay silent (spec §6.3). If our participantId is unknown
- *    (handshake not yet cached), we cannot match → sleep (safer than guessing).
+ * Returns true (addressed / no @ in play) when:
+ *  - No `mentions` → true (backward-compat single-agent /ws/session; sensible
+ *    default when a session has a single provider agent).
+ *  - `mentions` present + this agent's participantId is in the list → true.
+ * Returns false only when `mentions` names others and our participantId is known
+ * but absent (or participantId unknown → conservatively false).
  *
  * Note: in legacy /ws/session mode there is no top-level `mentions` and
- * `myParticipantId` is undefined → always wakes (unchanged behavior). */
-export function shouldWakeAgent(
+ * `myParticipantId` is undefined → true (unchanged). */
+export function isAddressedToMe(
   myParticipantId: string | undefined,
   message: Record<string, unknown>,
 ): boolean {
