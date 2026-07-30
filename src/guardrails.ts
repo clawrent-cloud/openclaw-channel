@@ -2,6 +2,8 @@ import fs from "node:fs";
 
 export interface GuardrailResult {
   blocked: boolean;
+  /** D2: silent drop (no reply, no warning) — vs `blocked` which replies with a warning. */
+  drop?: boolean;
   reason?: string;
 }
 
@@ -53,4 +55,16 @@ export function checkGuardrails(text: string, fileContent?: string): GuardrailRe
     }
   }
   return { blocked: false };
+}
+
+/**
+ * D2 prefilter: silent-drop obvious garbage (no reply, no warning) BEFORE driving the
+ * agent. Conservative — only drops content with no alphanumeric/CJK at all (pure
+ * symbols/punctuation/whitespace beyond the empty-trim check). Legit messages pass.
+ */
+export function prefilter(text: string): GuardrailResult {
+  if (!/[A-Za-z0-9一-鿿]/.test(text)) {
+    return { blocked: false, drop: true, reason: "content has no alphanumeric/CJK — likely noise" };
+  }
+  return { blocked: false, drop: false };
 }

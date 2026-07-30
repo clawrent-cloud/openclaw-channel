@@ -17,7 +17,7 @@
 //   - dispatchReplyWithBufferedBlockDispatcher ← openclaw/plugin-sdk/reply-dispatch-runtime
 //   - runChannelInboundEvent                   ← openclaw/plugin-sdk/channel-inbound
 
-import { checkGuardrails, loadGuardrails } from "./guardrails.js";
+import { checkGuardrails, loadGuardrails, prefilter } from "./guardrails.js";
 import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 
@@ -171,6 +171,13 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       // @ is now CONTEXT (addressedToMe), threaded to the agent via UntrustedStructuredContext (D2).
       const addressedToMe = isAddressedToMe(session?.participantId, message);
 
+      // D2: prefilter — silent-drop obvious garbage (no reply, no warning).
+      const pre = prefilter(content);
+      if (pre.drop) {
+        log(`prefilter drop session=${sessionId}: ${pre.reason}`);
+        return;
+      }
+
       // 护栏:危险指令直接拦截,不驱动 agent。
       const guard = checkGuardrails(content);
       if (guard.blocked) {
@@ -190,16 +197,40 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       const storePath = routeSessionKey.replace(/[:]/g, "_");
       const consumerId = session?.consumerUserId ?? "consumer";
 
+      // D2: UntrustedStructuredContext — sender / mentions / gist / @-addressing. With the
+      // @-gate gone (D1), this is what lets the agent self-decide whether + how to reply.
+      const mentions = Array.isArray((message as any).mentions) ? (message as any).mentions : [];
+      const untrusted = {
+        addressedToMe,
+        sender: {
+          participantId: (message as any).sender?.participantId,
+          side: (message as any).sender?.side,
+          agentId: (message as any).sender?.agentId,
+          consumerUserId: session?.consumerUserId,
+        },
+        mentions,
+        gist: session?.taskDescription,
+        participantId: session?.participantId,
+      };
+      // Inject the context as a preamble in the agent-facing text so the model literally
+      // sees it (also available structured on ctxPayload.UntrustedStructuredContext).
+      const textForAgentContent =
+        `[被@: ${addressedToMe ? "是" : "否"}] ` +
+        `[发送方: ${untrusted.sender.side ?? "unknown"}] ` +
+        `[会话: ${untrusted.gist ?? ""}] ` +
+        `[mentions: ${mentions.length}]\n${content}`;
+
       const ctxPayload: Record<string, unknown> = {
         From: `${CHANNEL}:${consumerId}`,
         Body: content,
         RawBody: content,
-        BodyForAgent: content,
+        BodyForAgent: textForAgentContent,
         channel: CHANNEL,
         SessionKey: routeSessionKey,
+        UntrustedStructuredContext: untrusted,
       };
 
-      const raw = { sessionId, consumerId, content, message };
+      const raw = { sessionId, consumerId, content, message, textForAgent: textForAgentContent };
 
       try {
         await opts.deps.runChannelInboundEvent({
@@ -216,7 +247,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
               id: `${r.sessionId}:${(r.message as any)?.id ?? Date.now()}`,
               timestamp: Date.now(),
               rawText: r.content,
-              textForAgent: r.content,
+              textForAgent: (r as any).textForAgent ?? r.content,
               textForCommands: r.content,
               raw: r,
             }),
