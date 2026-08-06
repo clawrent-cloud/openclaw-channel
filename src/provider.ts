@@ -45,6 +45,18 @@ export interface StartProviderOptions {
   /** D3: triage switches. prefilter default on; twoPhase default off. */
   triagePrefilter?: boolean;
   triageTwoPhase?: boolean;
+  /**
+   * Fired once when this provider terminally dies (ProviderClient emits
+   * `agent:dead` / `agent:activation:failed`). The gateway-account lifecycle
+   * (index.ts startAccount) uses this to exit the account task so the gateway
+   * auto-restarts it (bounded backoff). Optional — absent in legacy mode.
+   */
+  onTerminal?: (agentKey: string, reason: unknown) => void;
+  /**
+   * Account abort signal. When aborted (gateway stopping the account), stop the
+   * ProviderClient. Removed again in the returned handle's stop() for cleanliness.
+   */
+  abortSignal?: AbortSignal;
 }
 
 export interface ProviderHandle {
@@ -93,14 +105,34 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
   // Surface presence self-heal events (SDK EventEmitter). These replace the dead
   // onDisconnect/onError args previously passed to client.start() — ProviderCallbacks
   // never had those fields, so they were silently ignored.
+  const agentKey = opts.agentId ?? "default";
+  // Terminal death is fire-once: notifies the account lifecycle (onTerminal) so the
+  // gateway can auto-restart the account. Guarded so multiple terminal events don't
+  // re-fire.
+  let terminated = false;
+  const fireTerminal = (reason: unknown) => {
+    if (terminated) return;
+    terminated = true;
+    opts.onTerminal?.(agentKey, reason);
+  };
   client.on('agent:reconnecting', (delay: number) => log(`presence reconnecting in ${delay}ms`));
   client.on('agent:activated', () => log(`presence activated (online)`));
-  client.on('agent:activation:failed', (_aid: unknown, err: unknown) =>
-    log(`presence activation FAILED (terminal): ${(err as Error)?.message ?? err}`),
-  );
-  client.on('agent:dead', (_aid: unknown, reason: unknown) =>
-    log(`presence DEAD — terminal close, will not reconnect: ${reason}`),
-  );
+  client.on('agent:activation:failed', (_aid: unknown, err: unknown) => {
+    log(`presence activation FAILED (terminal): ${(err as Error)?.message ?? err}`);
+    fireTerminal(err);
+  });
+  client.on('agent:dead', (_aid: unknown, reason: unknown) => {
+    log(`presence DEAD — terminal close, will not reconnect: ${reason}`);
+    fireTerminal(reason);
+  });
+  // Stop the client when the gateway aborts the account (stopChannel/restart).
+  const onAbort = () => {
+    try { client.stop(); } catch { /* best-effort */ }
+  };
+  if (opts.abortSignal) {
+    if (opts.abortSignal.aborted) onAbort();
+    else opts.abortSignal.addEventListener("abort", onAbort, { once: true });
+  }
   // Phase 3: pause/resume observability (ProviderClient 0.4.0 emits these).
   // Pause = consumer paused this agent (4020 close, no reconnect); resume = consumer
   // resumed → ProviderClient reconnects /ws/group. The agent simply goes idle while
@@ -127,7 +159,13 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
     if (total > 0) usageBySession.set(sid, total);
   });
 
-  await client.start({
+  // client.start() resolves once the ProviderClient is set up. If initial setup
+  // throws (e.g. 401 auth, unreachable API), treat it as terminal so the account
+  // lifecycle (startAccount) exits and the gateway runs its bounded auto-restart
+  // (retries transient failures; gives up on persistent config errors). Without
+  // this, a setup failure would leave startAccount holding the task alive with no
+  // live provider and no recovery.
+  const startError: unknown = await client.start({
     agentId: opts.agentId,
 
     onPendingApproval: async (session: any) => {
@@ -325,7 +363,24 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         log(`runChannelInboundEvent failed session=${sessionId}: ${String(e)}`);
       }
     },
-  });
+  }).then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  if (startError !== undefined) {
+    log(`provider failed to start (terminal): ${String(startError)}`);
+    fireTerminal(startError);
+    return {
+      stop: () => {
+        if (opts.abortSignal) opts.abortSignal.removeEventListener("abort", onAbort);
+        // client.start() threw before setup completed (e.g. 401 auth, unreachable
+        // API). Do NOT call client.stop() here — the SDK has an internal pending
+        // firstActivation promise that stop() would reject with "Provider stopped",
+        // and that rejection is unhandled and crashes the host gateway. The client
+        // never finished starting, so there is nothing to stop.
+      },
+    };
+  }
 
   log(`provider started (agentId=${opts.agentId ?? "auto"} autoApprove=${opts.autoApprove})`);
 
@@ -336,6 +391,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       } catch {
         /* diagnostic unsubscribe best-effort */
       }
+      if (opts.abortSignal) opts.abortSignal.removeEventListener("abort", onAbort);
       try {
         client.stop();
       } catch (e) {

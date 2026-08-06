@@ -1,5 +1,12 @@
-// Lightweight connection-test module for the ClawRent channel setup surface.
+// testConnection helper for the ClawRent channel setup surface (the
+// createChannelPluginBase `setup.testConnection` adapter in index.ts).
 // Uses @clawrent/provider's ApiClient (same package that drives the runtime).
+//
+// History: this module was previously referenced by package.json
+// `openclaw.setupEntry`; that field was removed because the OpenClaw loader
+// validated the setupEntry module with the full-plugin register/activate check
+// (which this named-export helper legitimately lacks), falsely rejecting the
+// plugin at startup. The setup adapter on the channel plugin now covers it.
 export interface ClawRentConnectionResult {
   ok: boolean;
   detail?: string;
@@ -28,5 +35,3 @@ export async function testConnection(config: {
     return { ok: false, error: String(e?.message ?? e) };
   }
 }
-
-export default { testConnection };
