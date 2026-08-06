@@ -45,6 +45,20 @@
    normalize default / module-wrapper 导出，接受 register/activate；PinkBo 在 2026.7.1-2
    复测 `onStartup:true` + `defineChannelPluginEntry`（含纯 default-export 变体）干净加载、
    不复现（openclaw/openclaw#111344 关闭为 "already implemented"）。
+   **⚠️ 但 clawrent 直到 0.6.0 仍在启动报 `missing register/activate`——真因是 #7（setupEntry），不是本条。** 本条（default-export loader bug）与 clawrent 实际踩到的validation 失败是**两条不同的路径**，别混。
+7. **`openclaw.setupEntry` 被当 plugin 入口校验（2026-08-07 实测，0.7.0 已绕过）**：
+   `package.json` 的 `openclaw.setupEntry` / `runtimeSetupEntry` 指向 `./dist/setup/setup.js`
+   时，loader 在 setup-only / prefer-setup registration plan 下会把 setup.js 当作主入口加载
+   （`loader-svIpMF0d.js:1915` `loadEntry = loadSetupEntry && runtimeSetupEntry ? runtimeSetupEntry : runtimeCandidateEntry`），
+   再对它跑完整 plugin 的 register/activate 校验。而 setup.js 是 setup 接口（导出 `{testConnection}`），
+   合法地没有 register/activate → 误报 `clawrent missing register/activate export` → plugin
+   启动 validation 失败、不进注册 plugin 列表（只剩 channel 触发式加载的 registerFull 兜底，所以显得"非阻塞"）。
+   诊断法：`OPENCLAW_PLUGIN_LOAD_DEBUG=1` 起 gateway，看 `module shape: export:object keys=__esModule,default,testConnection`
+   （= setup.js 形态，非 index.js 的 entry）即铁证。`describePluginModuleExportShape`（loader:392）输出。
+   **plugin 侧修法**：删 `package.json` 的 `setupEntry`/`runtimeSetupEntry`（setup 向导 testConnection
+   由 `createChannelPluginBase({setup})` adapter 覆盖；setup-only 模式 fallback 加载 index.js，registerFull
+   只 full 模式起 provider、setup-only 不起，安全）。**建议回馈上游**：loader 不应对 setupEntry 跑完整
+   register/activate 校验（setup entry 是 `defineSetupPluginEntry`/setup 契约，非 plugin entry）。
 6. **`channelConfigs` manifest 字段文档不足**：install 警告
    "channel plugin manifest declares clawrent without channelConfigs metadata"，
    但 manifest 已声明 `channelConfigs`。需明确该字段的精确期望结构。
