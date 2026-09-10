@@ -6,6 +6,19 @@
 
 ---
 
+## 7.1 vs 9.3 已知差异表（0.8.0 维护的地板=2026.7.1，2026-09-10 审计）
+
+| 面 | 2026.7.1 | 2026.9.3 | 我们的策略 |
+|---|---|---|---|
+| 结构化上下文字段 | `UntrustedStructuredContext`（对象） | `ChannelStructuredContext`（entries 数组），旧名已过移除窗口 | 只写新字段；7.1 退化 BodyForAgent preamble（两代行为一致） |
+| capability consent | 无 | install/enable/升级需 `--accept-capabilities`（第三方插件，能力面变化触发） | README 引导；manifest 面保持最小 |
+| `plugins.installs` 落盘 | plugin 管理命令可能写入（legacy 残留） | 写盘自动剥除；strict schema 拒绝该 key | 宿主侧问题，见 memory `openclaw-8-2-installs-key-fix` |
+| channel meta | 不要求 | label/selectionLabel/docsPath/blurb 缺失时 gateway 兜底并告警 | 0.8.0 显式提供 |
+| Node 运行时 | 无硬性要求 | 宿主要求 Node ≥24.16（宿主侧约束，非插件约束） | 文档提示，不在 engines 强制 |
+| update rehearsal | 无 | 宿主升级排练会核对插件兼容声明+channel readiness | 声明准确（Task 2），readiness 快速返回 |
+
+---
+
 ## 1. 已确认的 OpenClaw Channel Plugin SDK 事实（2026.6.11）
 
 | 项 | 文档说法 | 实际实现（dist 验证） |

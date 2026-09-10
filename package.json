@@ -52,6 +52,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:compat:floor": "npm install --no-save openclaw@2026.7.1 && npm run typecheck",
+    "verify:compat:current": "npm install && npm run typecheck && npm test",
+    "verify:compat": "npm run verify:compat:floor && npm run verify:compat:current",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
