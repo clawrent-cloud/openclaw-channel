@@ -51,6 +51,12 @@
    缺失会让 `openclaw` 任何子命令都因 config validation 失败而无法启动。建议：
    - 文档明确警告；或
    - OpenClaw 对"未启用插件"跳过 required 校验。
+   **（2026-09-10 于 2026.9.3 复核：已大幅改善——失败范围缩小为定向报错，不再阻断全局。**
+   **实测**（临时改安装目录 manifest `configSchema.required: ["token"]`）：`openclaw plugins list`
+   正常出全表 exit 0（仅多一条 `Persisted plugin registry no longer matches…` 漂移警告）；
+   `openclaw config validate` 定向报 `plugins.entries.clawrent.config.token: must have required
+   property 'token'` 并 exit 1，其余命令不受影响。7.x 时代"整个 CLI 启动失败"在 9.3 不再复现。
+   本条可视为已在上游收敛；插件侧仍保持 required 空数组以兼容旧宿主。）
 5. **`plugins install --link` 的入口校验与 `defineChannelPluginEntry` 不一致**：
    install 报 `missing register/activate export`，但 `defineChannelPluginEntry` 的
    返回值已含 `register`。建议统一 install 校验逻辑，或文档说明入口文件的导出约定。
