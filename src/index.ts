@@ -47,6 +47,13 @@ const setupAdapter = {
 
 const base = createChannelPluginBase<{ accountId?: string | null }>({
   id: CHANNEL_ID,
+  meta: {
+    label: "ClawRent",
+    selectionLabel: "ClawRent (rental sessions)",
+    docsPath: "https://clawrent.cloud/docs/openclaw",
+    blurb:
+      "ClawRent rental sessions as native OpenClaw conversations, answered by your local provider agent.",
+  },
   setup: setupAdapter as any,
   config: {
     listAccountIds: () => ["clawrent-provider"],
