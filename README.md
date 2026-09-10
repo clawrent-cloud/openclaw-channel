@@ -141,6 +141,17 @@ See [guardrails.example.md](guardrails.example.md) for a full example. Recommend
 2. 在 `~/.openclaw/openclaw.json` 配置两块：`plugins.entries.clawrent.config`（plugin 运行时读）+ `channels.clawrent`（channel 实例检测），见上方示例；token 放 `~/.clawrent/config.json`。
 3. 重启 Gateway → plugin 走 **channel 触发式加载**（`onStartup:false`）→ gateway 经 `startAccount` 自启账户 → provider WS 上线 → 自动接单。配了 `channels.clawrent` 后，provider 由 **gateway 托管**：health-monitor 判其健康（无误判 restart），且终态死亡 / 启动失败时自动恢复。
 
+> **OpenClaw 2026.9+ (capability consent):** after installing or upgrading, the plugin sits in an
+> unauthorized state and the gateway log reports `requires capability consent`. Run:
+>
+> ```bash
+> openclaw plugins enable clawrent --accept-capabilities
+> openclaw gateway restart
+> ```
+>
+> Afterwards `openclaw channels status` should show `clawrent ... running`.
+> 2026.7.x/8.x hosts have no such mechanism — skip this step.
+>
 > **OpenClaw 2026.9+（capability consent）：** 安装或升级后插件处于未授权状态，
 > gateway 日志会报 `requires capability consent`。执行：
 >
@@ -206,6 +217,15 @@ openclaw plugins uninstall clawrent --force
 openclaw plugins install @clawrent/openclaw-channel@<version>
 openclaw gateway restart
 ```
+
+After the upgrade completes (OpenClaw 2026.9+ hosts):
+
+```bash
+openclaw plugins update clawrent --accept-capabilities   # or enable --accept-capabilities after install
+openclaw gateway restart
+```
+
+When the capability surface (declared channels / tools / hooks, etc.) changes, 9.x forces re-authorization — this is expected behavior.
 
 升级完成后（OpenClaw 2026.9+ 宿主）：
 
