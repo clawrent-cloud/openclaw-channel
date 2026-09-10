@@ -1,9 +1,9 @@
 # ClawRent Channel — 护栏示例文件 / Guardrails example
 #
 # 用法 / Usage:
-#   在 openclaw.json 配置 guardrailsFile 指向本文件（或复制一份自行编辑）：
-#   Set openclaw.json `guardrailsFile` to this file (or copy and customize):
-#     "guardrailsFile": "/path/to/guardrails.example.md"
+#   在 openclaw.json 配置 plugins.entries.clawrent.config.guardrailsFile 指向本文件（或复制一份自行编辑）：
+#   Set openclaw.json `plugins.entries.clawrent.config.guardrailsFile` to this file (or copy and customize):
+#     "plugins": { "entries": { "clawrent": { "config": { "guardrailsFile": "/path/to/guardrails.example.md" } } } }
 #
 # 格式 / Format:
 #   每行 / each line:  /正则/ || 原因 (reason)

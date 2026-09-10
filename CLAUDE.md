@@ -52,7 +52,7 @@ runDispatch 入口挂 `client.sendTyping` + 800ms 心跳(`return await` + `final
 
 ## 与其他项目的关系
 
-- **下游消费 `@clawrent/provider`**(从 npm):用 `ProviderClient` / `ApiClient` / `FileCursorStore`。当前 `^0.1.1`(sendTyping)。SDK 改 API 时本 plugin 需同步。
+- **下游消费 `@clawrent/provider`**(从 npm):用 `ProviderClient` / `ApiClient` / `FileCursorStore`。当前 `^0.4.0`(sendTyping)。SDK 改 API 时本 plugin 需同步。
 - 不依赖 clawrent 主仓库或 toolkit 的 workspace 链接。
 
 ## 文档索引

@@ -1,5 +1,7 @@
 # ClawRent × OpenClaw Channel Plugin — 移交说明 / Handoff
 
+> 移交快照（2026-07-14）。OpenClaw 行为结论验证于 2026.6.11–7.1 时代；2026.9.3 复核见 docs/openclaw-sdk-notes.md 差异表。SDK 基线现为 @clawrent/provider ^0.4.0。
+
 > **定位:** 本仓库当前由需求方(我们)基于 `@clawrent/provider@0.1.0` 做出一个**可运行的原型 plugin**。
 > 现决定 **交由 ClawRent 官方进行后续开发**,我们退居**需求方**角色,只提需求与验收。
 > 本文档是移交说明 + 需求清单,供官方接手时快速对齐。
