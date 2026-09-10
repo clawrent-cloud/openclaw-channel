@@ -19,7 +19,7 @@
 | `configSchema.required` 非空 | 整个 CLI 启动失败（全局阻断） | **定向报错**：`config validate` 报 `plugins.entries.<id>.config.<field>: must have required property` 后 exit 1；`plugins list` 不受影响（2026-09-10 实测） | 仍保持空数组（兼容 8.x 前宿主），见 issue #4 |
 | 缺 `channels.clawrent` 块 | channel 不触发加载（行为缺失） | 插件**仍加载**：legacy `registerFull` 兜底与 gateway `startAccount` **双路径同时各启动一个 provider**（实测 2 条 `provider started` + 2 条 `presence activated`） | 必须配块——只走 gateway 托管单实例路径（README 两块契约） |
 | `uninstall` 是否删 `channels.<id>` 块 | 未验证 | **仍删除**（源码 `uninstall-config` → `removePluginRuntimePolicyFromConfig` 删 `channels.<channelIds>` + `plugins.entries.<id>` + allow 项；未实测活卸载——生产机禁 `uninstall --force`） | 保留 README uninstall 警告 |
-| install record 缓存 manifest | 改磁盘 + `registry --refresh` 不够，必须新版本包 | **按 plugin 记 `manifestHash`，漂移即失效**并回退 derived(live) index（实测改 manifest 即报 `registry no longer matches`） | 结论不变（onStartup 保持 false），理由更新（README onStartup 段） |
+| install record 缓存 manifest | 「改磁盘 + `registry --refresh` 不够，必须新版本包」——0.2.x 时代发现，7.1 未独立复核（沿引旧结论） | **按 plugin 记 `manifestHash`，漂移即失效**并回退 derived(live) index（实测改 manifest 即报 `registry no longer matches`） | 结论不变（onStartup 保持 false），理由更新（README onStartup 段） |
 | `channels status --deep` | 存在，7.1 有显示 bug | **flag 已移除**（`OpenClaw does not recognize option "--deep"`；deep 变体迁至 `openclaw status --deep` / `gateway status --deep`）；普通 `channels status` 实测显示准确 | 按 9.3 口径更新 README 警告 |
 | setup SDK 面 | `openclaw/plugin-sdk/setup` 仅底层原语 | 仍无 `definePluginSetup`/`defineSetupSteps`，但 setup 子路径导出大幅扩充（`setup`/`channel-setup`/`setup-runtime`/`setup-tools`/`provider-setup`，含 `defineChannelSetupContract`、`createClackPrompter` 等） | 继续用 `testConnection()` 轻量 setup（issue #1） |
 
