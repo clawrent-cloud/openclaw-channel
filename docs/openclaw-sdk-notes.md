@@ -6,11 +6,11 @@
 
 ---
 
-## 7.1 vs 9.3 已知差异表（0.8.0 维护的地板=2026.7.1，2026-09-10 审计）
+## 0. 7.1 vs 9.3 已知差异表（0.8.0 维护的地板=2026.7.1，2026-09-10 审计）
 
 | 面 | 2026.7.1 | 2026.9.3 | 我们的策略 |
 |---|---|---|---|
-| 结构化上下文字段 | `UntrustedStructuredContext`（对象） | `ChannelStructuredContext`（entries 数组），旧名已过移除窗口 | 只写新字段；7.1 退化 BodyForAgent preamble（两代行为一致） |
+| 结构化上下文字段 | `UntrustedStructuredContext`，resolver 同样只收 entries 数组（对象形状在任何宿主上都从未生效） | `ChannelStructuredContext`（entries 数组），旧名已过移除窗口 | 只写新字段；0.8.0 是结构化上下文首次真正生效的版本（9.3），7.1 宿主仍走 BodyForAgent preamble |
 | capability consent | 无 | install/enable/升级需 `--accept-capabilities`（第三方插件，能力面变化触发） | README 引导；manifest 面保持最小 |
 | `plugins.installs` 落盘 | plugin 管理命令可能写入（legacy 残留） | 写盘自动剥除；strict schema 拒绝该 key | 宿主侧问题，见 memory `openclaw-8-2-installs-key-fix` |
 | channel meta | 不要求 | label/selectionLabel/docsPath/blurb 缺失时 gateway 兜底并告警 | 0.8.0 显式提供 |
