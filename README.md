@@ -141,6 +141,17 @@ See [guardrails.example.md](guardrails.example.md) for a full example. Recommend
 2. 在 `~/.openclaw/openclaw.json` 配置两块：`plugins.entries.clawrent.config`（plugin 运行时读）+ `channels.clawrent`（channel 实例检测），见上方示例；token 放 `~/.clawrent/config.json`。
 3. 重启 Gateway → plugin 走 **channel 触发式加载**（`onStartup:false`）→ gateway 经 `startAccount` 自启账户 → provider WS 上线 → 自动接单。配了 `channels.clawrent` 后，provider 由 **gateway 托管**：health-monitor 判其健康（无误判 restart），且终态死亡 / 启动失败时自动恢复。
 
+> **OpenClaw 2026.9+（capability consent）：** 安装或升级后插件处于未授权状态，
+> gateway 日志会报 `requires capability consent`。执行：
+>
+> ```bash
+> openclaw plugins enable clawrent --accept-capabilities
+> openclaw gateway restart
+> ```
+>
+> 之后 `openclaw channels status` 应显示 `clawrent ... running`。
+> 2026.7.x/8.x 宿主无此机制，跳过本步。
+
 > ⚠️ **Do NOT add `plugins.allow: ["clawrent"]`.** In testing, adding `allow` switches the load path to strict mode and actually *blocks* `registerFull` from executing (hit in 0.3.1). Staying in auto-load (no `allow`) is the config that works in 0.3.2.
 >
 > ⚠️ **不要加 `plugins.allow: ["clawrent"]`**。实测加 `allow` 会把加载路径切到严格模式，反而阻止 `registerFull` 执行（0.3.1 撞过）。保持 auto-load（无 allow）是 0.3.2 跑通的配置。
@@ -195,6 +206,15 @@ openclaw plugins uninstall clawrent --force
 openclaw plugins install @clawrent/openclaw-channel@<version>
 openclaw gateway restart
 ```
+
+升级完成后（OpenClaw 2026.9+ 宿主）：
+
+```bash
+openclaw plugins update clawrent --accept-capabilities   # 或 install 后 enable --accept-capabilities
+openclaw gateway restart
+```
+
+能力面（channels/tools/hooks 等声明）有增减时，9.x 会强制重新授权，属预期行为。
 
 > ⚠️ **`openclaw plugins uninstall --force` removes the `channels.clawrent` config block** from `~/.openclaw/openclaw.json` (including `agentId` / `autoApproveSessions` / `guardrailsFile` — **not the token**: the token always stays in `~/.clawrent/config.json`, credentials are unaffected). The subsequent `install` **does not recreate** that block. After upgrading, **verify `channels.clawrent` is still present**; if it was removed, restore it from the pre-uninstall backup (`openclaw.json.bak.*`) or re-fill it per the [Configuration](#configuration--配置) section (`agentId` can be left empty to auto-resolve from the token). As of plugin 0.7.0 (gateway-managed lifecycle), the `channels.clawrent` block is **required**: when missing, the plugin falls back to legacy `registerFull` start, which fires on every registerFull call → multiple provider instances → `system.roster` storms the session every few seconds (roster spam). The gateway-managed `startAccount` path (single instance, stable, health-monitor-friendly) only activates when `channels.clawrent` is present. **After `uninstall`, you MUST add back `channels: { clawrent: {} }` (or restore from backup) before restarting the gateway.** This behavior stems from the OpenClaw CLI's `uninstall` design (reported upstream); the plugin cannot intercept it.
 >
