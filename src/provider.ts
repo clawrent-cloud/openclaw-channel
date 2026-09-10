@@ -78,6 +78,36 @@ function extractDialogue(message: Record<string, unknown>): { type: string; cont
   return { type, content: String(content ?? "") };
 }
 
+/**
+ * D2 上下文 → OpenClaw ChannelStructuredContext entries（2026.9 channel contract）。
+ * 旧字段名 UntrustedStructuredContext 的移除窗口 2026-09-08 已过；9.3 运行时只认
+ * entries 数组形状。7.1 宿主不认识新字段 → 退化为 BodyForAgent preamble 通道，
+ * 与 9.3 修复前状态一致（两个宿主时代行为对齐，见 plan Task 6 差异表）。
+ */
+export interface ClawRentSessionContext {
+  addressedToMe: boolean;
+  sender: {
+    participantId?: string;
+    side?: string;
+    agentId?: string;
+    consumerUserId?: string;
+  };
+  mentions: unknown[];
+  gist?: string;
+  participantId?: string;
+}
+
+export function buildStructuredContextEntries(untrusted: ClawRentSessionContext) {
+  return [
+    {
+      label: "ClawRent session context",
+      source: "clawrent",
+      type: "clawrent-session-context",
+      payload: untrusted,
+    },
+  ];
+}
+
 export async function startProvider(opts: StartProviderOptions): Promise<ProviderHandle> {
   const log = (m: string) => (opts.onLog ? opts.onLog(m) : console.log(`[clawrent:provider] ${m}`));
 
@@ -209,7 +239,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       }
 
       // D1: @-gate removed — agent self-decides whether to reply (prompt-based).
-      // @ is now CONTEXT (addressedToMe), threaded to the agent via UntrustedStructuredContext (D2).
+      // @ is now CONTEXT (addressedToMe), threaded to the agent via ChannelStructuredContext (D2).
       const addressedToMe = isAddressedToMe(session?.participantId, message);
 
       // D2 prefilter (D3: gated by triagePrefilter, default on) — silent-drop garbage.
@@ -248,7 +278,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       const storePath = routeSessionKey.replace(/[:]/g, "_");
       const consumerId = session?.consumerUserId ?? "consumer";
 
-      // D2: UntrustedStructuredContext — sender / mentions / gist / @-addressing. With the
+      // D2: ChannelStructuredContext — sender / mentions / gist / @-addressing. With the
       // @-gate gone (D1), this is what lets the agent self-decide whether + how to reply.
       const mentions = Array.isArray((message as any).mentions) ? (message as any).mentions : [];
       const untrusted = {
@@ -264,7 +294,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         participantId: session?.participantId,
       };
       // Inject the context as a preamble in the agent-facing text so the model literally
-      // sees it (also available structured on ctxPayload.UntrustedStructuredContext).
+      // sees it (also available structured on ctxPayload.ChannelStructuredContext).
       const textForAgentContent =
         `[被@: ${addressedToMe ? "是" : "否"}] ` +
         `[发送方: ${untrusted.sender.side ?? "unknown"}] ` +
@@ -278,7 +308,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         BodyForAgent: textForAgentContent,
         channel: CHANNEL,
         SessionKey: routeSessionKey,
-        UntrustedStructuredContext: untrusted,
+        ChannelStructuredContext: buildStructuredContextEntries(untrusted),
       };
 
       const raw = { sessionId, consumerId, content, message, textForAgent: textForAgentContent };
