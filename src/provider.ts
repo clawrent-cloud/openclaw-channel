@@ -108,6 +108,11 @@ export function buildStructuredContextEntries(untrusted: ClawRentSessionContext)
   ];
 }
 
+/** 2026.9 canonical route key; peer = ClawRent sessionId. */
+export function buildRouteSessionKey(sessionId: string, agentId = "main"): string {
+  return `agent:${agentId}:${CHANNEL}:direct:${sessionId.toLowerCase()}`;
+}
+
 export async function startProvider(opts: StartProviderOptions): Promise<ProviderHandle> {
   const log = (m: string) => (opts.onLog ? opts.onLog(m) : console.log(`[clawrent:provider] ${m}`));
 
@@ -273,9 +278,11 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       }
 
       // 驱动 OpenClaw agent 跑一个 inbound turn。
-      const routeSessionKey = `${CHANNEL}:${sessionId}`;
-      // Windows 文件名不允许冒号, storePath 需做安全转义。
-      const storePath = routeSessionKey.replace(/[:]/g, "_");
+      // OpenClaw 2026.9 canonical route session key (agent:<agent>:<channel>:direct:<peer>).
+      // 7.1 treats session keys as opaque strings (no validation), so this is safe on the
+      // >=2026.7.1 floor; 9.3 REFUSES non-canonical writes (SessionCanonicalKeyMigrationRequiredError).
+      // Peer id = ClawRent sessionId (UUID, lowercased to satisfy key normalization).
+      const routeSessionKey = buildRouteSessionKey(sessionId);
       const consumerId = session?.consumerUserId ?? "consumer";
 
       // D2: ChannelStructuredContext — sender / mentions / gist / @-addressing. With the
@@ -336,7 +343,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
               channel: CHANNEL,
               accountId: opts.accountId,
               routeSessionKey,
-              storePath,
+              // storePath omitted: 9.3 canonical session store owns route entries; a custom path was resolved against the gateway CWD (System32) on 9.x.
               ctxPayload,
               recordInboundSession: opts.deps.recordInboundSession,
               record: { createIfMissing: true, updateLastRoute: true },
