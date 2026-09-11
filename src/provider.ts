@@ -346,7 +346,10 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
               // storePath omitted: 9.3 canonical session store owns route entries; a custom path was resolved against the gateway CWD (System32) on 9.x.
               ctxPayload,
               recordInboundSession: opts.deps.recordInboundSession,
-              record: { createIfMissing: true, updateLastRoute: true },
+              // updateLastRoute 必须省略:7.1 接受布尔 flag,9.3 把它当载荷对象解构
+              // (update.sessionKey → undefined → "Cannot resolve SQLite session scope
+              // without an agent id")。last-route 元数据是 advisory,出站回复走 client.send,不依赖它。
+              record: { createIfMissing: true },
               runDispatch: async () => {
                 // 通知 consumer:provider 正在生成回复(dialogue.typing 控制信号,后端短路
                 // 转发、不持久化/不计 metering)。WS-only:sendTyping 在 WS 非 OPEN 时静默
