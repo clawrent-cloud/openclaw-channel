@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { checkGuardrails, prefilter, phase1Triage } from "./guardrails.js";
+import path from "node:path";
+import { checkGuardrails, prefilter, phase1Triage, resolveGuardrailsPath } from "./guardrails.js";
 
 describe("prefilter (D2 silent-drop)", () => {
   it("drops content with no alphanumeric/CJK (pure symbols / whitespace / emoji)", () => {
@@ -48,5 +49,29 @@ describe("phase1Triage (D3, default off)", () => {
     expect(phase1Triage("hi").skip).toBe(false);
     expect(phase1Triage("hello there").skip).toBe(false);
     expect(phase1Triage("你好世界").skip).toBe(false);
+  });
+});
+
+describe("resolveGuardrailsPath", () => {
+  const stateDir = path.join("C:", "Users", "me", ".openclaw");
+
+  it("returns absolute paths as-is (Windows drive letter)", () => {
+    const abs = path.join("C:", "guardrails", "policy.md");
+    expect(resolveGuardrailsPath(abs, stateDir)).toBe(abs);
+  });
+
+  it("resolves relative paths against the provided state dir", () => {
+    expect(resolveGuardrailsPath("guardrails.md", stateDir)).toBe(
+      path.join(stateDir, "guardrails.md"),
+    );
+    expect(resolveGuardrailsPath(path.join("policy", "rules.md"), stateDir)).toBe(
+      path.join(stateDir, "policy", "rules.md"),
+    );
+  });
+
+  it("does not mutate the raw input", () => {
+    const raw = "guardrails.md";
+    resolveGuardrailsPath(raw, stateDir);
+    expect(raw).toBe("guardrails.md");
   });
 });

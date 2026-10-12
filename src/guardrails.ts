@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 export interface GuardrailResult {
   blocked: boolean;
@@ -23,6 +24,13 @@ export function loadGuardrails(path?: string): string {
   } catch {
     return "";
   }
+}
+
+/** Resolve a user-supplied guardrailsFile. Absolute → as-is; relative → against the
+ *  OpenClaw state dir (~/.openclaw), never the gateway process CWD (System32 under
+ *  the scheduled task). */
+export function resolveGuardrailsPath(raw: string, stateDir: string): string {
+  return path.isAbsolute(raw) ? raw : path.join(stateDir, raw);
 }
 
 /**

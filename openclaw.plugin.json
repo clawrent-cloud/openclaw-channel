@@ -45,7 +45,8 @@
           },
           "guardrailsFile": {
             "type": "string",
-            "title": "Path to guardrails markdown"
+            "title": "Path to guardrails markdown",
+            "description": "External guardrails policy file. Absolute path used as-is; relative paths resolve against the OpenClaw state dir (~/.openclaw), never the gateway process CWD. / 相对路径基于 ~/.openclaw 解析（而非网关进程 CWD）。"
           },
           "cursorPath": {
             "type": "string",
@@ -148,7 +149,8 @@
       },
       "guardrailsFile": {
         "type": "string",
-        "title": "Path to guardrails markdown"
+        "title": "Path to guardrails markdown",
+        "description": "External guardrails policy file. Absolute path used as-is; relative paths resolve against the OpenClaw state dir (~/.openclaw), never the gateway process CWD. / 相对路径基于 ~/.openclaw 解析（而非网关进程 CWD）。"
       },
       "cursorPath": {
         "type": "string",

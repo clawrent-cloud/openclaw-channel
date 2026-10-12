@@ -10,6 +10,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { startProvider, type ProviderHandle } from "./provider.js";
+import { resolveGuardrailsPath } from "./guardrails.js";
 import { testConnection } from "./setup/setup.js";
 
 const CHANNEL_ID = "clawrent";
@@ -140,7 +141,11 @@ function serveAgents(opts: ServeOptions): void {
   const apiBaseUrl: string | undefined = opts.config.apiBaseUrl;
   const wsUrl: string | undefined = opts.config.wsUrl;
   const autoApprove: boolean = opts.config.autoApproveSessions ?? true;
-  const guardrailsFile: string | undefined = opts.config.guardrailsFile;
+  // Relative guardrailsFile resolves against the OpenClaw state dir (~/.openclaw),
+  // never the gateway process CWD (System32 under the Windows scheduled task).
+  const guardrailsFile: string | undefined = opts.config.guardrailsFile
+    ? resolveGuardrailsPath(opts.config.guardrailsFile, path.join(homedir(), ".openclaw"))
+    : undefined;
   const useGroupChannel: boolean = opts.config.useGroupChannel ?? true;
   const triagePrefilter: boolean | undefined = opts.config.triagePrefilter;
   const triageTwoPhase: boolean | undefined = opts.config.triageTwoPhase;
