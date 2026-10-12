@@ -53,3 +53,35 @@ describe("sessionIdFromKey", () => {
     expect(sessionIdFromKey("noseparator")).toBeNull();
   });
 });
+
+describe("sessionIdFromKey (canonical route keys, OpenClaw 2026.9+)", () => {
+  it("maps a canonical 5-segment key to its peer (peer = ClawRent sessionId)", () => {
+    expect(sessionIdFromKey("agent:agt-1:clawrent:direct:sess-9")).toBe("sess-9");
+  });
+
+  it("maps a canonical key regardless of agentId", () => {
+    expect(sessionIdFromKey("agent:other-agent-77:clawrent:direct:sess-9")).toBe("sess-9");
+  });
+
+  it("maps the 6-segment per-account shape (dmScope per account)", () => {
+    expect(sessionIdFromKey("agent:agt-1:clawrent:acct-42:direct:sess-9")).toBe("sess-9");
+  });
+
+  it("still maps the legacy clawrent:<sid> shape", () => {
+    expect(sessionIdFromKey("clawrent:sess-legacy")).toBe("sess-legacy");
+  });
+
+  it("returns null for canonical keys of a different channel", () => {
+    expect(sessionIdFromKey("agent:x:other:direct:y")).toBeNull();
+    expect(sessionIdFromKey("other:z")).toBeNull();
+    // channel name in the accountId slot only — still another channel's key.
+    expect(sessionIdFromKey("agent:x:other:clawrent:direct:y")).toBeNull();
+  });
+
+  it("returns null for undefined / garbage / truncated keys", () => {
+    expect(sessionIdFromKey(undefined)).toBeNull();
+    expect(sessionIdFromKey("agent:x:clawrent:direct")).toBeNull();
+    expect(sessionIdFromKey("agent:x:clawrent:direct:")).toBeNull();
+    expect(sessionIdFromKey("direct:sess-9")).toBeNull();
+  });
+});

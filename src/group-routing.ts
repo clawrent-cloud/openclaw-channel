@@ -49,13 +49,31 @@ export function computeUsageTotal(
   return input + output;
 }
 
-/** Map a clawrent routeSessionKey (`<channel>:<sessionId>`) back to the sessionId.
- *  Returns null if the key is missing or not for this channel. */
+/** Map a route session key back to the ClawRent sessionId. Two accepted shapes:
+ *  - Legacy route key: `<channel>:<sessionId>` (pre-2026.9).
+ *  - Canonical OpenClaw route key (2026.9+): `agent:<agentId>:<channel>:direct:<peerId>`
+ *    or `agent:<agentId>:<channel>:<accountId>:direct:<peerId>` (per-account dmScope) —
+ *    the trailing peer segment is the ClawRent sessionId.
+ *  Returns null if the key is missing, malformed, or not for this channel. */
 export function sessionIdFromKey(
   sessionKey: string | undefined,
   channel = "clawrent",
 ): string | null {
   if (typeof sessionKey !== "string") return null;
+  // Legacy route key: `<channel>:<sessionId>`.
   const prefix = `${channel}:`;
-  return sessionKey.startsWith(prefix) ? sessionKey.slice(prefix.length) : null;
+  if (sessionKey.startsWith(prefix)) return sessionKey.slice(prefix.length);
+  // Canonical OpenClaw route key (2026.9+): `agent:<agentId>:<channel>:direct:<peerId>`
+  // or `agent:<agentId>:<channel>:<accountId>:direct:<peerId>` — channel is always the
+  // 3rd segment (index 2); the trailing peer is the ClawRent sessionId.
+  const segs = sessionKey.split(":");
+  if (
+    segs.length >= 5 &&
+    segs[0] === "agent" &&
+    segs[2] === channel &&
+    segs[segs.length - 2] === "direct"
+  ) {
+    return segs[segs.length - 1] || null;
+  }
+  return null;
 }
