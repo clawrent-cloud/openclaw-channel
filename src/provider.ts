@@ -17,7 +17,7 @@
 //   - dispatchReplyWithBufferedBlockDispatcher ← openclaw/plugin-sdk/reply-dispatch-runtime
 //   - runChannelInboundEvent                   ← openclaw/plugin-sdk/channel-inbound
 
-import { createGuardrailPolicy, prefilter, phase1Triage } from "./guardrails.js";
+import { createGuardrailPolicy, prefilter, phase1Triage, sanitizeUntrustedText, type GuardrailResult } from "./guardrails.js";
 import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
 import { applyRosterFrame, formatRosterForPreamble, type RosterCache, type RosterEntry } from "./roster-cache.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
@@ -190,6 +190,8 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
   // session.participant_* 控制帧;'session:presence' 一路收 participant_joined/left
   // 增量(session-manager 对这两类不触发 onMessage)。两处共用 applyRosterFrame。
   const rosterBySession: RosterCache = new Map();
+  // MCP06: 元数据护栏命中日志去重(键 `${sessionId}|${field}` → 命中原因),会话结束随 roster 一并清理。
+  const metaHits = new Map<string, string | undefined>();
   client.on('session:presence', (sid: string, frame: Record<string, unknown>) => {
     applyRosterFrame(rosterBySession, sid, String(frame?.type ?? ''), (frame as { payload?: unknown })?.payload);
   });
@@ -239,6 +241,8 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
     onSessionEnded: (session: any, reason?: string) => {
       log(`session ended: ${session?.sessionId} reason=${reason ?? ""}`);
       rosterBySession.delete(session?.sessionId);
+      metaHits.delete(`${session?.sessionId}|gist`);
+      metaHits.delete(`${session?.sessionId}|roster`);
     },
 
     onMessage: async (session: any, message: Record<string, unknown>) => {
@@ -306,7 +310,28 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       // @-gate gone (D1), this is what lets the agent self-decide whether + how to reply.
       const mentions = Array.isArray((message as any).mentions) ? (message as any).mentions : [];
       const roster = rosterBySession.get(sessionId) ?? [];
+      // MCP06 #3:会话元数据进 agent 上下文前先清洗(控制字符压平/超长截断),伪前导标记失去载体。
+      const rawGist = String(session?.taskDescription ?? "");
+      const gist = rawGist ? sanitizeUntrustedText(rawGist) : "";
       const rosterLine = formatRosterForPreamble(roster);
+      const rosterPreamble = rosterLine ? sanitizeUntrustedText(rosterLine, 1000) : "";
+      // MCP06 #2:元数据与对话文本同等过策略 —— 命中即剥离该段(前导 + 结构化通道同时),
+      // 对话继续不拦截;同一 session 同字段去重打一条告警(原因变化才重打)。
+      const gistHit: GuardrailResult | null = gist ? guardrailPolicy.check(gist) : null;
+      const rosterHit: GuardrailResult | null = rosterPreamble ? guardrailPolicy.check(rosterPreamble) : null;
+      const logMetaHit = (field: "gist" | "roster", hit: GuardrailResult) => {
+        const key = `${sessionId}|${field}`;
+        if (metaHits.get(key) === hit.reason) return;
+        metaHits.set(key, hit.reason);
+        log(
+          `metadata guardrail hit session=${sessionId} field=${field}: ${hit.reason}` +
+            ` — stripped from agent context, dialogue continues`,
+        );
+      };
+      if (gistHit?.blocked) logMetaHit("gist", gistHit);
+      if (rosterHit?.blocked) logMetaHit("roster", rosterHit);
+      const gistSafe = gistHit?.blocked ? "" : gist;
+      const rosterSafe = rosterHit?.blocked ? "" : rosterPreamble;
       const untrusted = {
         addressedToMe,
         sender: {
@@ -316,18 +341,18 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
           consumerUserId: session?.consumerUserId,
         },
         mentions,
-        gist: session?.taskDescription,
+        gist: gistSafe || undefined,
         participantId: session?.participantId,
-        roster,
+        roster: rosterHit?.blocked ? [] : roster,
       };
       // Inject the context as a preamble in the agent-facing text so the model literally
       // sees it (also available structured on ctxPayload.ChannelStructuredContext).
       const textForAgentContent =
         `[被@: ${addressedToMe ? "是" : "否"}] ` +
         `[发送方: ${untrusted.sender.side ?? "unknown"}] ` +
-        `[会话: ${untrusted.gist ?? ""}] ` +
+        (gistSafe ? `[会话: ${gistSafe}] ` : "") +
         `[mentions: ${mentions.length}]` +
-        (rosterLine ? ` [参与者: ${rosterLine}]` : "") +
+        (rosterSafe ? ` [参与者: ${rosterSafe}]` : "") +
         `\n${content}`;
 
       const ctxPayload: Record<string, unknown> = {
