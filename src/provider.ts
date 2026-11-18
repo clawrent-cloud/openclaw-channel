@@ -19,6 +19,7 @@
 
 import { checkGuardrails, loadGuardrails, prefilter, phase1Triage } from "./guardrails.js";
 import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
+import { applyRosterFrame, formatRosterForPreamble, type RosterCache, type RosterEntry } from "./roster-cache.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 
 export interface ProviderRuntimeDeps {
@@ -95,6 +96,8 @@ export interface ClawRentSessionContext {
   mentions: unknown[];
   gist?: string;
   participantId?: string;
+  /** 支柱 C:当前会话名单(谁在、谁从属谁;system.roster + 增量维护)。 */
+  roster?: RosterEntry[];
 }
 
 export function buildStructuredContextEntries(untrusted: ClawRentSessionContext) {
@@ -179,6 +182,14 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
     log(`session RESUMED sid=${sid} — reconnecting /ws/group`),
   );
 
+  // 支柱 C:会话级 roster 缓存。onMessage 一路收 system.roster 快照与
+  // session.participant_* 控制帧;'session:presence' 一路收 participant_joined/left
+  // 增量(session-manager 对这两类不触发 onMessage)。两处共用 applyRosterFrame。
+  const rosterBySession: RosterCache = new Map();
+  client.on('session:presence', (sid: string, frame: Record<string, unknown>) => {
+    applyRosterFrame(rosterBySession, sid, String(frame?.type ?? ''), (frame as { payload?: unknown })?.payload);
+  });
+
   // Plan 4b-2.3: capture per-session model token usage from OpenClaw diagnostics so
   // outbound replies can carry payload.usage.totalTokens for per_token metering.
   // Best-effort — if OpenClaw doesn't tag model.usage with a clawrent sessionKey the
@@ -224,11 +235,14 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
 
     onSessionEnded: (session: any, reason?: string) => {
       log(`session ended: ${session?.sessionId} reason=${reason ?? ""}`);
+      rosterBySession.delete(session?.sessionId);
     },
 
     onMessage: async (session: any, message: Record<string, unknown>) => {
       const sessionId: string = session?.sessionId;
       const rawType: string = String((message as any)?.type ?? (message as any)?.messageType ?? "?");
+      // 支柱 C:roster 快照/控制帧先行入缓存(它们不进对话,只维护名单)。
+      applyRosterFrame(rosterBySession, sessionId, rawType, (message as { payload?: unknown })?.payload);
       log(`onMessage RAW session=${sessionId} type=${rawType}`);
       const { type, content } = extractDialogue(message);
       log(`onMessage session=${sessionId} type=${type} len=${content.length}`);
@@ -288,6 +302,8 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       // D2: ChannelStructuredContext — sender / mentions / gist / @-addressing. With the
       // @-gate gone (D1), this is what lets the agent self-decide whether + how to reply.
       const mentions = Array.isArray((message as any).mentions) ? (message as any).mentions : [];
+      const roster = rosterBySession.get(sessionId) ?? [];
+      const rosterLine = formatRosterForPreamble(roster);
       const untrusted = {
         addressedToMe,
         sender: {
@@ -299,6 +315,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         mentions,
         gist: session?.taskDescription,
         participantId: session?.participantId,
+        roster,
       };
       // Inject the context as a preamble in the agent-facing text so the model literally
       // sees it (also available structured on ctxPayload.ChannelStructuredContext).
@@ -306,7 +323,9 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         `[被@: ${addressedToMe ? "是" : "否"}] ` +
         `[发送方: ${untrusted.sender.side ?? "unknown"}] ` +
         `[会话: ${untrusted.gist ?? ""}] ` +
-        `[mentions: ${mentions.length}]\n${content}`;
+        `[mentions: ${mentions.length}]` +
+        (rosterLine ? ` [参与者: ${rosterLine}]` : "") +
+        `\n${content}`;
 
       const ctxPayload: Record<string, unknown> = {
         From: `${CHANNEL}:${consumerId}`,

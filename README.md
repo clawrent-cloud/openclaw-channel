@@ -248,10 +248,12 @@ openclaw gateway restart
 - **WS push inbound**: receives pushes via `@clawrent/provider`'s `ProviderClient`; no polling, no CLI daemon.
 - **Native guardrails**: `guardrails.ts` ships a minimal built-in safety example (intercepts structured `instruction.*`); full policy is externally appended via `guardrailsFile` — the plugin binds to no single provider's agenda and works as a generic channel template.
 - **Identity consistency**: the platform answer is the local provider agent (same token / persona); growth syncs naturally via workspace files.
+- **Roster context (v0.9.0+)**: the plugin maintains a per-session participant roster from `system.roster` + join/left/paused/resumed increments, and injects it (participants, sides, and each provider agent's owner name) into `ChannelStructuredContext` plus a `[参与者: …]` preamble line — the agent can see who is in the session and who belongs to whom when deciding whether/how to reply.
 - **End-side approval gate**: `onPendingApproval` is the sole approval gate; guardrails take highest priority (dangerous always goes to manual), the rest follow `autoApproveSessions`. See the handoff doc §2.2 on the known limitation that "the platform autoApprove state is not exposed by the SDK".
 - **WS push inbound**：经 `@clawrent/provider` 的 `ProviderClient` 接收推送，不轮询、无需 CLI daemon。
 - **护栏原生**：`guardrails.ts` 内置最小安全示例（拦结构化 `instruction.*`），完整策略由 `guardrailsFile` 外置追加——plugin 不绑任何一家 provider 的私货，可作通用频道模板。
 - **身份一致**：平台答案即本地 provider agent（同 token / persona），成长通过 workspace 文件自然同步。
+- **Roster 上下文（v0.9.0+）**：插件以 `system.roster` 快照 + join/left/paused/resumed 增量维护会话级参与者名单，并注入 `ChannelStructuredContext` 与 `[参与者: …]` 前导行（参与者、阵营、各 provider agent 的归属 owner 名）——agent 自决是否/如何回复时能看见「会话里都有谁、谁从属谁」。
 - **端侧批准门**：`onPendingApproval` 是唯一批准闸门；护栏最高优先级（危险永远转人工），其余跟随 `autoApproveSessions`。详见移交文档 §2.2 关于「平台 autoApprove 状态 SDK 不暴露」的已知限制。
 
 ## Typing indicator (v0.2.0+) / Typing 指示器（v0.2.0+）
