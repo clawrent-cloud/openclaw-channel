@@ -88,6 +88,11 @@ export function parseGuardrailRules(content: string): ParsedGuardrailFile {
       }
       source = m[1];
       flags = m[2];
+      if (!source) {
+        // `//` / `//i` 空定界:RegExp("") 匹配一切,必须拦下(终审 Important 1)
+        warnings.push(`line ${lineNo}: empty pattern, skipped`);
+        continue;
+      }
     }
     try {
       rules.push({ re: new RegExp(source, flags.includes("i") ? flags : flags + "i"), reason });

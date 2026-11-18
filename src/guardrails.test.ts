@@ -128,6 +128,15 @@ describe("parseGuardrailRules (audit F2 fix)", () => {
     expect(g.warnings[0]).toMatch(/line 1: empty pattern/);
   });
 
+  it("warns and skips empty slash-delimited patterns (// and //i must not match-all)", () => {
+    for (const line of ["// || catch-all typo", "//i || r"]) {
+      const g = parseGuardrailRules(line);
+      expect(g.rules).toHaveLength(0);
+      expect(g.warnings).toHaveLength(1);
+      expect(g.warnings[0]).toMatch(/line 1: empty pattern/);
+    }
+  });
+
   it("warns with the RegExp error for invalid regex sources (slash + bare forms)", () => {
     const g1 = parseGuardrailRules("/[a-/ || r");
     expect(g1.rules).toHaveLength(0);
