@@ -17,6 +17,17 @@ const BLOCK_PATTERNS: GuardrailRule[] = [
   { re: /instruction\.(exec|read_file|write_file)/i, reason: "拒绝结构化危险指令(exec/文件读写)" },
 ];
 
+// MCP06 方案 C(0.9.3):元数据路径(任务描述/参与者名单)的内置 NL 默认规则 —— 默认部署
+// (未配 guardrailsFile)时凭据索取/绕过护栏类自然语言也不放行。**只挂 checkMetadata**;
+// 消息级 check() 语义冻结(2026-07-16 裁定:对话内容默认只拦结构化 instruction.*,平台不
+// 替越狱检测托底)。pattern 与 guardrails.example.md 同源。
+const METADATA_NL_PATTERNS: GuardrailRule[] = [
+  { re: /(give|send|show)\s+(me\s+)?(token|password|secret|key)/i, reason: "默认元数据规则:凭据索取" },
+  { re: /(给我|发我|提供|索取)\s*(token|密码|password|secret|key|私钥)/i, reason: "默认元数据规则:凭据索取" },
+  { re: /(ignore|disregard|skip)\s+(all|previous|the)\s+(rules|instructions|guardrails)/i, reason: "默认元数据规则:绕过护栏" },
+  { re: /(忽略|无视|跳过|不要遵守)(以上|之前的|所有)?(规则|限制|护栏|约束)/i, reason: "默认元数据规则:绕过护栏" },
+];
+
 export function loadGuardrails(path?: string): string {
   if (!path) return "";
   try {
@@ -135,8 +146,10 @@ export function sanitizeUntrustedText(text: string, maxLen = 512): string {
 }
 
 export interface GuardrailPolicy {
-  /** 内置规则 + 外部规则(缓存)联合判定;永不抛异常。 */
+  /** 内置规则 + 外部规则(缓存)联合判定;永不抛异常。对话内容路径,语义冻结。 */
   check(text: string): GuardrailResult;
+  /** 元数据路径(任务描述/roster):在 check 基础上追加内置 NL 默认规则(方案 C)。 */
+  checkMetadata(text: string): GuardrailResult;
   /** 丢弃缓存,下次 check 重新加载(测试用)。 */
   refresh(): void;
 }
@@ -173,24 +186,31 @@ export function createGuardrailPolicy(opts: {
     return cache.rules;
   };
 
+  const runText = (text: string, extraBuiltins: GuardrailRule[]): GuardrailResult => {
+    const rules: GuardrailRule[] = [...BLOCK_PATTERNS, ...extraBuiltins];
+    if (file) {
+      try {
+        rules.push(...load());
+      } catch (e) {
+        if (!errored) {
+          log(
+            `[guardrails] guardrailsFile unreadable (${file}): ` +
+              `${e instanceof Error ? e.message : String(e)} — continuing with built-ins only`,
+          );
+        }
+        errored = true;
+        cache = null;
+      }
+    }
+    return firstMatch(rules, text);
+  };
+
   return {
     check(text: string): GuardrailResult {
-      const rules: GuardrailRule[] = [...BLOCK_PATTERNS];
-      if (file) {
-        try {
-          rules.push(...load());
-        } catch (e) {
-          if (!errored) {
-            log(
-              `[guardrails] guardrailsFile unreadable (${file}): ` +
-                `${e instanceof Error ? e.message : String(e)} — continuing with built-ins only`,
-            );
-          }
-          errored = true;
-          cache = null;
-        }
-      }
-      return firstMatch(rules, text);
+      return runText(text, []);
+    },
+    checkMetadata(text: string): GuardrailResult {
+      return runText(text, METADATA_NL_PATTERNS);
     },
     refresh() {
       cache = null;

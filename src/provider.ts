@@ -319,8 +319,8 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       const rosterFull = rosterLine ? sanitizeUntrustedText(rosterLine, Infinity) : "";
       // MCP06 #2:元数据与对话文本同等过策略 —— 命中即剥离该段(前导 + 结构化通道同时),
       // 对话继续不拦截;同一 session 同字段去重打一条告警(原因变化才重打)。
-      const gistHit: GuardrailResult | null = gist ? guardrailPolicy.check(gist) : null;
-      const rosterHit: GuardrailResult | null = rosterFull ? guardrailPolicy.check(rosterFull) : null;
+      const gistHit: GuardrailResult | null = gist ? guardrailPolicy.checkMetadata(gist) : null;
+      const rosterHit: GuardrailResult | null = rosterFull ? guardrailPolicy.checkMetadata(rosterFull) : null;
       const logMetaHit = (field: "gist" | "roster", hit: GuardrailResult) => {
         const key = `${sessionId}|${field}`;
         if (metaHits.get(key) === hit.reason) return;
