@@ -314,11 +314,13 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       const rawGist = String(session?.taskDescription ?? "");
       const gist = rawGist ? sanitizeUntrustedText(rawGist) : "";
       const rosterLine = formatRosterForPreamble(roster);
-      const rosterPreamble = rosterLine ? sanitizeUntrustedText(rosterLine, 1000) : "";
+      // 检查必须覆盖整行:截断窗口之外的敌意文本会漏检,而结构化通道交付的是完整 roster
+      // (终审 Important:检查串≠交付串的窗口缺口)。1000 上限只作用于前导渲染。
+      const rosterFull = rosterLine ? sanitizeUntrustedText(rosterLine, Infinity) : "";
       // MCP06 #2:元数据与对话文本同等过策略 —— 命中即剥离该段(前导 + 结构化通道同时),
       // 对话继续不拦截;同一 session 同字段去重打一条告警(原因变化才重打)。
       const gistHit: GuardrailResult | null = gist ? guardrailPolicy.check(gist) : null;
-      const rosterHit: GuardrailResult | null = rosterPreamble ? guardrailPolicy.check(rosterPreamble) : null;
+      const rosterHit: GuardrailResult | null = rosterFull ? guardrailPolicy.check(rosterFull) : null;
       const logMetaHit = (field: "gist" | "roster", hit: GuardrailResult) => {
         const key = `${sessionId}|${field}`;
         if (metaHits.get(key) === hit.reason) return;
@@ -331,7 +333,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       if (gistHit?.blocked) logMetaHit("gist", gistHit);
       if (rosterHit?.blocked) logMetaHit("roster", rosterHit);
       const gistSafe = gistHit?.blocked ? "" : gist;
-      const rosterSafe = rosterHit?.blocked ? "" : rosterPreamble;
+      const rosterSafe = rosterHit?.blocked ? "" : sanitizeUntrustedText(rosterFull, 1000);
       const untrusted = {
         addressedToMe,
         sender: {
