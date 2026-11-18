@@ -8,6 +8,10 @@
 // 纯函数、无副作用:provider.ts 持有 Map<sessionId, RosterEntry[]>,每帧调用
 // applyRosterFrame 维护;回复时把缓存注入 ChannelStructuredContext + 前导文案,
 // agent 据此知道"会话里都有谁、谁从属谁"。
+//
+// 生命周期边界(终审 F5,接受):本 agent 被 pause(4020,SDK 停止重连)期间会话被
+// end,无连接可投递 4021 → onSessionEnded 不触发,该会话条目留存至插件重启
+// (每条数百字节,有界,不清算)。
 
 export interface RosterEntry {
   participantId: string;
@@ -86,7 +90,13 @@ function applyGone(cache: RosterCache, sessionId: string, payload: FramePayload)
   cache.set(sessionId, hit.list);
 }
 
-/** session.participant_paused(→paused) / resumed(→active):在场状态标记。 */
+/** session.participant_paused(→paused) / resumed(→active):在场状态标记。
+ *
+ * 生产可达的两种序列(2026-11-18 UAT 实证):
+ *  - 在线被 pause:paused 帧后紧跟其 socket close 的 left 帧 → 条目最终移除
+ *    (paused 标记只短暂存活;"不在场"语义,与被暂停者无法发言一致)。
+ *  - 离线被 pause(无 socket 可关):只有 paused 帧,无 left → 条目保留并标记
+ *    已暂停;resume 后标记回 active,agent 重连时 joined 增量补全。 */
 function applyStatus(cache: RosterCache, sessionId: string, payload: FramePayload, status: "active" | "paused"): void {
   const hit = findByPayloadId(cache, sessionId, payload);
   if (!hit) return;
