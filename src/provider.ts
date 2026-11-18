@@ -17,7 +17,7 @@
 //   - dispatchReplyWithBufferedBlockDispatcher ← openclaw/plugin-sdk/reply-dispatch-runtime
 //   - runChannelInboundEvent                   ← openclaw/plugin-sdk/channel-inbound
 
-import { checkGuardrails, loadGuardrails, prefilter, phase1Triage } from "./guardrails.js";
+import { createGuardrailPolicy, prefilter, phase1Triage } from "./guardrails.js";
 import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
 import { applyRosterFrame, formatRosterForPreamble, type RosterCache, type RosterEntry } from "./roster-cache.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
@@ -119,6 +119,10 @@ export function buildRouteSessionKey(sessionId: string, agentId = "main"): strin
 export async function startProvider(opts: StartProviderOptions): Promise<ProviderHandle> {
   const log = (m: string) => (opts.onLog ? opts.onLog(m) : console.log(`[clawrent:provider] ${m}`));
 
+  // 审计 F1 修复:策略加载+判定收拢为单一 policy 实例,入站消息与 approval 共用,
+  // 外部 guardrailsFile 规则对两者同等生效(缓存 + 热加载 + fail-loud 回退内置)。
+  const guardrailPolicy = createGuardrailPolicy({ guardrailsFile: opts.guardrailsFile, onLog: log });
+
   // 动态 import,避免插件在未安装 @clawrent/provider 时整体加载失败。
   let ProviderClient: any;
   let FileCursorStore: any;
@@ -218,8 +222,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       // 平台基线为 false(不自动批准);批准动作只在此端侧一道门发生。
       // 护栏最高优先级:危险类永远转人工,无视 autoApprove 开关。
       const task = String(session?.taskDescription ?? session?.task ?? "");
-      const fileContent = loadGuardrails(opts.guardrailsFile);
-      const res = checkGuardrails(task, fileContent);
+      const res = guardrailPolicy.check(task);
       if (res.blocked) {
         log(`[clawrent] blocked pending session=${session?.sessionId}: ${res.reason}`);
         return false; // 危险 → 转人工
@@ -278,8 +281,8 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         }
       }
 
-      // 护栏:危险指令直接拦截,不驱动 agent。
-      const guard = checkGuardrails(content);
+      // 护栏:危险指令直接拦截,不驱动 agent(内置 + 外部规则同等生效,见 guardrailPolicy)。
+      const guard = guardrailPolicy.check(content);
       if (guard.blocked) {
         log(`guardrail blocked session=${sessionId}: ${guard.reason}`);
         await client
