@@ -36,7 +36,7 @@ const SESSION = { sessionId: "s1", participantId: "p1", consumerUserId: "u1" };
 
 async function boot(guardrailsFile?: string) {
   const logs: string[] = [];
-  const dispatches: unknown[] = [];
+  const dispatches: Array<{ raw: { textForAgent: string; content: string }; turn: unknown }> = [];
   const handle = await startProvider({
     agentToken: "tok",
     cursorPath: path.join(os.tmpdir(), "cursor.json"),
