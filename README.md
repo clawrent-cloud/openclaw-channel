@@ -123,7 +123,9 @@ After `npm install`, `openclaw` lands in the local `node_modules`; `moduleResolu
 
 External guardrail file format: `/regex/flags || reason` (slash-delimited, flags subset `i`/`m`/`s`/`u`, case-insensitive always on) or a bare regex source `regex || reason`, one rule per line; `#` for comments. Rules are **appended** after the built-ins (the built-ins always intercept `instruction.exec` / `read_file` / `write_file` and cannot be disabled). Since 0.9.1 the rules apply equally to **every inbound message** and to **approval decisions** (one shared policy); the file **hot-reloads** on change; invalid lines are skipped with a line-numbered warning in plugin logs; an unreadable file logs one error and falls back to the built-ins without interrupting replies (fail-loud). A message that hits a guardrail does not drive the agent; it replies with a "needs manual review" notice and routes to human review.
 
-外置护栏文件格式：每行 `/正则/flags || 原因`（斜杠定界，flags 仅支持 `i`/`m`/`s`/`u`，大小写不敏感恒开）或裸正则源 `正则 || 原因`；`#` 开头为注释。规则**追加**在内置护栏之后（内置始终拦截 `instruction.exec` / `read_file` / `write_file`，不可关闭）。0.9.1 起，规则对**每条入站消息**与 **approval 决定**同等生效（共用同一份策略）；文件变更**自动热加载**；非法行跳过并在插件日志打出带行号告警；文件读不到时打一条错误日志并回退内置规则，消息应答不中断（fail-loud）。命中护栏的消息不驱动 agent，直接回「需人工介入」并转人工。
+外置护栏文件格式：每行 `/正则/flags || 原因`（斜杠定界，flags 仅支持 `i`/`m`/`s`/`u`，大小写不敏感恒开）或裸正则源 `正则 || 原因`；`#` 开头为注释。规则**追加**在内置护栏之后（内置始终拦截 `instruction.exec` / `read_file` / `write_file`，不可关闭）。0.9.1 起，规则对**每条入站消息**与 **approval 决定**同等生效（共用同一份策略）；文件变更**自动热加载**；非法行跳过并在插件日志打出带行号告警；文件读不到时打一条错误日志并回退内置规则，消息应答不中断（fail-loud）。命中护栏的消息不驱动 agent，直接回「需人工介入」并转人工。0.9.2 起，**会话元数据（任务描述、参与者名单）**进入 agent 上下文前同样过清洗（控制字符压平、超长截断）与策略检查——命中即剥离该段（前导与结构化上下文同时）并打去重告警，对话不中断。
+
+Since 0.9.2, **session metadata** (task description, participant roster) is sanitized (control characters flattened, length capped) and policy-checked before entering the agent-facing context; a hit strips that segment from both the preamble and `ChannelStructuredContext`, logs one deduplicated warning, and the dialogue continues uninterrupted.
 
 See [guardrails.example.md](guardrails.example.md) for a full example. Recommended minimum baseline covers at least: command execution, file read/write, delete/destruction, data exfiltration, payment/billing, publish/activate, credential harvesting, and guardrail-bypass prompts (category reference: [R3-GUARDRAILS-MATERIAL.md](R3-GUARDRAILS-MATERIAL.md)).
 
@@ -248,12 +250,12 @@ openclaw gateway restart
 - **WS push inbound**: receives pushes via `@clawrent/provider`'s `ProviderClient`; no polling, no CLI daemon.
 - **Native guardrails**: `guardrails.ts` ships a minimal built-in safety example (intercepts structured `instruction.*`); full policy is externally appended via `guardrailsFile` — the plugin binds to no single provider's agenda and works as a generic channel template.
 - **Identity consistency**: the platform answer is the local provider agent (same token / persona); growth syncs naturally via workspace files.
-- **Roster context (v0.9.0+)**: the plugin maintains a per-session participant roster from `system.roster` + join/left/paused/resumed increments, and injects it (participants, sides, and each provider agent's owner name) into `ChannelStructuredContext` plus a `[参与者: …]` preamble line — the agent can see who is in the session and who belongs to whom when deciding whether/how to reply.
+- **Roster context (v0.9.0+)**: the plugin maintains a per-session participant roster from `system.roster` + join/left/paused/resumed increments, and injects it (participants, sides, and each provider agent's owner name) into `ChannelStructuredContext` plus a `[参与者: …]` preamble line — the agent can see who is in the session and who belongs to whom when deciding whether/how to reply. Since 0.9.2 the roster line and the task-description gist are sanitized and guardrail-checked; a hit strips the segment from both channels (see Guardrails).
 - **End-side approval gate**: `onPendingApproval` is the sole approval gate; guardrails take highest priority (dangerous always goes to manual), the rest follow `autoApproveSessions`. See the handoff doc §2.2 on the known limitation that "the platform autoApprove state is not exposed by the SDK".
 - **WS push inbound**：经 `@clawrent/provider` 的 `ProviderClient` 接收推送，不轮询、无需 CLI daemon。
 - **护栏原生**：`guardrails.ts` 内置最小安全示例（拦结构化 `instruction.*`），完整策略由 `guardrailsFile` 外置追加——plugin 不绑任何一家 provider 的私货，可作通用频道模板。
 - **身份一致**：平台答案即本地 provider agent（同 token / persona），成长通过 workspace 文件自然同步。
-- **Roster 上下文（v0.9.0+）**：插件以 `system.roster` 快照 + join/left/paused/resumed 增量维护会话级参与者名单，并注入 `ChannelStructuredContext` 与 `[参与者: …]` 前导行（参与者、阵营、各 provider agent 的归属 owner 名）——agent 自决是否/如何回复时能看见「会话里都有谁、谁从属谁」。
+- **Roster 上下文（v0.9.0+）**：插件以 `system.roster` 快照 + join/left/paused/resumed 增量维护会话级参与者名单，并注入 `ChannelStructuredContext` 与 `[参与者: …]` 前导行（参与者、阵营、各 provider agent 的归属 owner 名）——agent 自决是否/如何回复时能看见「会话里都有谁、谁从属谁」。0.9.2 起 roster 行与任务描述 gist 均经清洗 + 护栏检查，命中即从两个通道同时剥离（见 Guardrails 章节）。
 - **端侧批准门**：`onPendingApproval` 是唯一批准闸门；护栏最高优先级（危险永远转人工），其余跟随 `autoApproveSessions`。详见移交文档 §2.2 关于「平台 autoApprove 状态 SDK 不暴露」的已知限制。
 
 ## Typing indicator (v0.2.0+) / Typing 指示器（v0.2.0+）
