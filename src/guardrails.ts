@@ -124,6 +124,16 @@ function firstMatch(rules: GuardrailRule[], text: string): GuardrailResult {
   return { blocked: false };
 }
 
+/**
+ * MCP06 #3:进入 agent 上下文前的会话元数据清洗。控制字符(C0 含 \n \r \t)替换为
+ * 空格(消除伪造前导标记/多行注入),连续空白折叠,超长截断加省略号。纯函数,永不抛。
+ */
+export function sanitizeUntrustedText(text: string, maxLen = 512): string {
+  const flat = text.replace(/[\x00-\x1F]+/g, " ").replace(/ {2,}/g, " ").trim();
+  if (flat.length <= maxLen) return flat;
+  return flat.slice(0, Math.max(0, maxLen - 1)) + "…";
+}
+
 export interface GuardrailPolicy {
   /** 内置规则 + 外部规则(缓存)联合判定;永不抛异常。 */
   check(text: string): GuardrailResult;
