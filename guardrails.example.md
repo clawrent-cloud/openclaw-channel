@@ -6,11 +6,21 @@
 #     "plugins": { "entries": { "clawrent": { "config": { "guardrailsFile": "/path/to/guardrails.example.md" } } } }
 #
 # 格式 / Format:
-#   每行 / each line:  /正则/ || 原因 (reason)
+#   每行两种等价格式 / each line, two equivalent forms:
+#     /正则/flags || 原因 (reason)   —— 斜杠定界，flags 仅支持 i/m/s/u（大小写不敏感恒开）/ slash-delimited, flags subset i/m/s/u (case-insensitive always on)
+#     正则 || 原因 (reason)          —— 裸正则源 / bare regex source
 #   - `#` 开头为注释，整行忽略 / lines starting with `#` are comments (ignored)
-#   - 正则大小写不敏感（内部 RegExp(pattern, "i")）/ case-insensitive
 #   - 规则作为内置护栏的「追加」，不覆盖内置 / appended to built-ins (do not override)
-#   - 非法正则的行会被静默忽略 / invalid regex lines are silently skipped
+#   - 非法行（未闭合定界/白名单外 flag/非法正则/空 pattern/缺 `||`）会被跳过，
+#     并在插件日志打出带行号的告警（0.9.1 起不再静默）/ invalid lines are skipped
+#     with a line-numbered warning in plugin logs (no longer silent since 0.9.1)
+#
+# 生效范围与行为 / Scope & behavior (0.9.1+):
+#   - 规则对**每条入站消息**与 **approval 决定**同等生效（共用同一份策略）/ rules apply
+#     equally to every inbound message and to approval decisions (one shared policy)
+#   - 文件变更自动热加载，无需重启 / file changes hot-reload without restart
+#   - 文件读不到时打一条错误日志并回退内置规则，消息应答不中断（fail-loud，
+#     非 fail-closed）/ unreadable file logs one error and falls back to built-ins
 #
 # 内置护栏（不可关闭，此处仅列出供参考）/ Built-in (non-disableable, listed for reference):
 #   instruction.exec / instruction.read_file / instruction.write_file

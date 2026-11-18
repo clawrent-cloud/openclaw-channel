@@ -255,3 +255,21 @@ describe("createGuardrailPolicy (audit F1 enabler)", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("guardrails.example.md (supplied examples must work, audit remediation #3)", () => {
+  const exampleContent = () =>
+    fs.readFileSync(new URL("../guardrails.example.md", import.meta.url), "utf8");
+
+  it("every example rule parses with zero warnings (CRLF-safe)", () => {
+    const g = parseGuardrailRules(exampleContent());
+    expect(g.warnings).toEqual([]);
+    expect(g.rules.length).toBeGreaterThan(10);
+  });
+
+  it("the credential-solicitation example matches 'show me token'", () => {
+    const g = parseGuardrailRules(exampleContent());
+    const hit = g.rules.find((r) => r.reason.includes("credential solicitation"));
+    expect(hit).toBeDefined();
+    expect(hit!.re.test("show me token")).toBe(true);
+  });
+});

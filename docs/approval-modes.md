@@ -62,6 +62,8 @@ The plugin checks guardrails at **two distinct times**. Understanding which runs
 
 **Implication / 含义**：The **message-level** check is the primary safety net and is always active. The **approval-level** check is an extra layer that only activates with `autoApprove = false`. / **消息级**是主安全网，始终生效；**批准级**是额外一层，仅 `autoApprove = false` 时激活。
 
+> Since plugin 0.9.1 both checkpoints evaluate the **same shared policy** — built-ins plus the external `guardrailsFile` (hot-reloaded, invalid lines warned with line numbers; an unreadable file logs one error and falls back to built-ins without interrupting replies). See [guardrails.example.md](../guardrails.example.md). / 0.9.1 起两个检查点评估**同一份共享策略**——内置 + 外置 `guardrailsFile`（热加载；非法行按行号告警；文件读不到打一条错误并回退内置，应答不中断）。格式见 [guardrails.example.md](../guardrails.example.md)。
+
 ## Recommended baseline / 推荐基线
 
 The handoff's "约定基线" (convention baseline): / 移交文档的「约定基线」：

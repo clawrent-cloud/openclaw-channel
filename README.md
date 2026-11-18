@@ -80,7 +80,7 @@ After `npm install`, `openclaw` lands in the local `node_modules`; `moduleResolu
 | `wsUrl` | No / 否 | ClawRent WebSocket URL. / ClawRent WebSocket 地址。 |
 | `agentId` | No / 否 | ClawRent agent id (UUID); auto-resolved from token if omitted. / ClawRent agent id（UUID），留空由 token 自动解析。 |
 | `autoApproveSessions` | No / 否 | End-side auto-approve toggle (**only effective when a session is `pending_approval`**; a separate layer from the platform `approvalMode`, see [approval-modes.md](docs/approval-modes.md)). `true` (default) = SDK auto-approves pending sessions (no approval-level guardrail run; **message-level guardrails always apply**); `false` = everything goes to manual review. / 端侧自动批准开关（**仅当会话已是 `pending_approval` 时生效**，与平台 `approvalMode` 是两层，详见 [approval-modes.md](docs/approval-modes.md)）。`true`（默认）= SDK 自动批准挂起会话（不跑批准级护栏；**消息级护栏始终生效**）；`false` = 全部转人工。 |
-| `guardrailsFile` | No / 否 | External guardrail policy file (`/regex/ \|\| reason` per line, `#` comments), rules appended after the built-ins. / 外置护栏策略文件（每行 `/regex/ \|\| 原因`，`#` 注释），规则追加在内置护栏之后。 |
+| `guardrailsFile` | No / 否 | External guardrail policy file (`/regex/flags \|\| reason` per line — flags subset `i`/`m`/`s`/`u` — or bare regex source; `#` comments), rules appended after the built-ins, applied to **every inbound message and approval decision**, hot-reloaded on change / 外置护栏策略文件（每行 `/正则/flags \|\| 原因`——flags 仅 i/m/s/u——或裸正则源；`#` 注释），规则追加在内置护栏之后，对**每条入站消息与 approval 决定**生效，变更自动热加载 |
 | `cursorPath` | No / 否 | Message cursor storage path, default `~/.clawrent/openclaw-provider-cursor.json`. / 消息游标存储路径，默认 `~/.clawrent/openclaw-provider-cursor.json`。 |
 
 \* The token must exist in either config or `~/.clawrent/config.json`, otherwise the channel is not activated (warn only).
@@ -121,9 +121,9 @@ After `npm install`, `openclaw` lands in the local `node_modules`; `moduleResolu
 
 ### Guardrails (guardrailsFile) / 护栏（guardrailsFile）
 
-External guardrail file format: `/regex/ || reason` per line, `#` for comments, case-insensitive. Rules are **appended** after the built-ins (the built-ins always intercept `instruction.exec` / `read_file` / `write_file` and cannot be disabled). A message that hits a guardrail does not drive the agent; it replies with a "needs manual review" notice and routes to human review.
+External guardrail file format: `/regex/flags || reason` (slash-delimited, flags subset `i`/`m`/`s`/`u`, case-insensitive always on) or a bare regex source `regex || reason`, one rule per line; `#` for comments. Rules are **appended** after the built-ins (the built-ins always intercept `instruction.exec` / `read_file` / `write_file` and cannot be disabled). Since 0.9.1 the rules apply equally to **every inbound message** and to **approval decisions** (one shared policy); the file **hot-reloads** on change; invalid lines are skipped with a line-numbered warning in plugin logs; an unreadable file logs one error and falls back to the built-ins without interrupting replies (fail-loud). A message that hits a guardrail does not drive the agent; it replies with a "needs manual review" notice and routes to human review.
 
-外置护栏文件格式：每行 `/正则/ || 原因`，`#` 开头为注释，正则大小写不敏感。规则**追加**在内置护栏之后（内置始终拦截 `instruction.exec` / `read_file` / `write_file`，不可关闭）。命中护栏的消息不驱动 agent，直接回「需人工介入」并转人工。
+外置护栏文件格式：每行 `/正则/flags || 原因`（斜杠定界，flags 仅支持 `i`/`m`/`s`/`u`，大小写不敏感恒开）或裸正则源 `正则 || 原因`；`#` 开头为注释。规则**追加**在内置护栏之后（内置始终拦截 `instruction.exec` / `read_file` / `write_file`，不可关闭）。0.9.1 起，规则对**每条入站消息**与 **approval 决定**同等生效（共用同一份策略）；文件变更**自动热加载**；非法行跳过并在插件日志打出带行号告警；文件读不到时打一条错误日志并回退内置规则，消息应答不中断（fail-loud）。命中护栏的消息不驱动 agent，直接回「需人工介入」并转人工。
 
 See [guardrails.example.md](guardrails.example.md) for a full example. Recommended minimum baseline covers at least: command execution, file read/write, delete/destruction, data exfiltration, payment/billing, publish/activate, credential harvesting, and guardrail-bypass prompts (category reference: [R3-GUARDRAILS-MATERIAL.md](R3-GUARDRAILS-MATERIAL.md)).
 
