@@ -15,9 +15,14 @@
 #     并在插件日志打出带行号的告警（0.9.1 起不再静默）/ invalid lines are skipped
 #     with a line-numbered warning in plugin logs (no longer silent since 0.9.1)
 #
-# 生效范围与行为 / Scope & behavior (0.9.1+):
+# 生效范围与行为 / Scope & behavior (0.9.3):
 #   - 规则对**每条入站消息**与 **approval 决定**同等生效（共用同一份策略）/ rules apply
 #     equally to every inbound message and to approval decisions (one shared policy)
+#   - 会话元数据（任务描述/参与者名单）只走结构化通道，不进 agent 前导；进入前先清洗，
+#     再过「元数据专用策略」——下方凭据索取/绕过护栏类示例规则已**内置为元数据默认**
+#     （0.9.3），外置规则在此路径继续追加 / session metadata travels structured-context
+#     only (never the preamble), sanitized then checked by a metadata-specific policy —
+#     the credential/bypass examples below ship as built-in metadata defaults (0.9.3)
 #   - 文件变更自动热加载，无需重启 / file changes hot-reload without restart
 #   - 文件读不到时打一条错误日志并回退内置规则，消息应答不中断（fail-loud，
 #     非 fail-closed）/ unreadable file logs one error and falls back to built-ins
