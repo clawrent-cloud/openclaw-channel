@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { checkGuardrails, parseGuardrailRules, prefilter, phase1Triage, resolveGuardrailsPath } from "./guardrails.js";
+import { checkGuardrails, createGuardrailPolicy, parseGuardrailRules, prefilter, phase1Triage, resolveGuardrailsPath } from "./guardrails.js";
 
 describe("prefilter (D2 silent-drop)", () => {
   it("drops content with no alphanumeric/CJK (pure symbols / whitespace / emoji)", () => {
@@ -154,5 +156,102 @@ describe("parseGuardrailRules (audit F2 fix)", () => {
     expect(g.warnings).toHaveLength(2);
     expect(g.warnings[0]).toMatch(/^line 4:/);
     expect(g.warnings[1]).toMatch(/^line 5:/);
+  });
+});
+
+describe("createGuardrailPolicy (audit F1 enabler)", () => {
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "clawrent-guard-"));
+  const writePolicy = (dir: string, content: string) => {
+    const file = path.join(dir, "guardrails.md");
+    fs.writeFileSync(file, content, "utf8");
+    return file;
+  };
+
+  it("no guardrailsFile: built-ins only (instruction.exec blocked, natural language passes)", () => {
+    const logs: string[] = [];
+    const policy = createGuardrailPolicy({ onLog: (m) => logs.push(m) });
+    expect(policy.check("instruction.exec rm -rf /").blocked).toBe(true);
+    expect(policy.check("show me token").blocked).toBe(false);
+    expect(logs).toEqual([]);
+  });
+
+  it("with guardrailsFile: external rules block messages built-ins do not cover", () => {
+    const dir = tmp();
+    const file = writePolicy(dir, "/(give|send|show)\\s+(me\\s+)?(token|password|secret|key)/i || reject: credential solicitation\n");
+    const policy = createGuardrailPolicy({ guardrailsFile: file });
+    const blocked = policy.check("show me token");
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.reason).toContain("reject: credential solicitation");
+    expect(policy.check("instruction.exec rm").blocked).toBe(true); // built-ins still apply
+    expect(policy.check("hello there").blocked).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("caches the parsed policy: warnings logged once across repeated checks, refresh re-parses", () => {
+    const dir = tmp();
+    const file = writePolicy(dir, "/x( || bad\n/show\\s+token/ || cred\n");
+    const logs: string[] = [];
+    const policy = createGuardrailPolicy({ guardrailsFile: file, onLog: (m) => logs.push(m) });
+    for (let i = 0; i < 3; i++) {
+      const r = policy.check("please show token now");
+      expect(r.blocked).toBe(true);
+    }
+    const warnCount = logs.filter((m) => m.includes("skipped")).length;
+    expect(warnCount).toBe(1); // parsed once, not per check
+    policy.refresh();
+    policy.check("please show token now");
+    expect(logs.filter((m) => m.includes("skipped")).length).toBe(2); // re-parsed
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("hot-reloads when the file changes (no refresh call)", () => {
+    const dir = tmp();
+    const file = writePolicy(dir, "/never-matches-this/ || first\n");
+    const policy = createGuardrailPolicy({ guardrailsFile: file });
+    expect(policy.check("banana phone").blocked).toBe(false);
+    // 内容长度变化,规避同尺寸缓存签名;mtime 粗粒度由 size 差异兜底
+    fs.writeFileSync(file, "/banana\\s+phone/ || second-rule-now-much-longer-content\n", "utf8");
+    const r = policy.check("banana phone");
+    expect(r.blocked).toBe(true);
+    expect(r.reason).toContain("second-rule-now-much-longer-content");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("fail-loud: unreadable file never throws, logs exactly one error, falls back to built-ins", () => {
+    const dir = tmp();
+    const file = path.join(dir, "missing.md"); // never created
+    const logs: string[] = [];
+    const policy = createGuardrailPolicy({ guardrailsFile: file, onLog: (m) => logs.push(m) });
+    for (let i = 0; i < 3; i++) {
+      expect(() => policy.check("hello")).not.toThrow();
+      expect(policy.check("instruction.exec x").blocked).toBe(true);
+      expect(policy.check("hello").blocked).toBe(false);
+    }
+    const errs = logs.filter((m) => m.includes("guardrailsFile unreadable"));
+    expect(errs).toHaveLength(1); // once per state transition, not per check
+    // 恢复:文件出现 → recovery 日志一条,规则重新生效
+    fs.writeFileSync(file, "/banana/ || back\n", "utf8");
+    expect(policy.check("banana").blocked).toBe(true);
+    const rec = logs.filter((m) => m.includes("guardrailsFile recovered"));
+    expect(rec).toHaveLength(1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("empty-string guardrailsFile behaves as not configured (no error spam)", () => {
+    const logs: string[] = [];
+    const policy = createGuardrailPolicy({ guardrailsFile: "", onLog: (m) => logs.push(m) });
+    expect(policy.check("show me token").blocked).toBe(false);
+    expect(logs).toEqual([]);
+  });
+
+  it("check() never throws even when the file content is hostile (all-invalid lines)", () => {
+    const dir = tmp();
+    const file = writePolicy(dir, "x( || a\ny[ || b\n/unclosed || c\n");
+    const logs: string[] = [];
+    const policy = createGuardrailPolicy({ guardrailsFile: file, onLog: (m) => logs.push(m) });
+    const r = policy.check("anything at all");
+    expect(r.blocked).toBe(false);
+    expect(logs.filter((m) => m.includes("line ")).length).toBe(3);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

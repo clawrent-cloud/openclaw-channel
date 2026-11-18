@@ -104,6 +104,10 @@ export function checkGuardrails(text: string, fileContent?: string): GuardrailRe
     ...BLOCK_PATTERNS,
     ...(fileContent ? parseGuardrailRules(fileContent).rules : []),
   ];
+  return firstMatch(rules, text);
+}
+
+function firstMatch(rules: GuardrailRule[], text: string): GuardrailResult {
   for (const p of rules) {
     if (p.re.test(text)) {
       return {
@@ -113,6 +117,70 @@ export function checkGuardrails(text: string, fileContent?: string): GuardrailRe
     }
   }
   return { blocked: false };
+}
+
+export interface GuardrailPolicy {
+  /** 内置规则 + 外部规则(缓存)联合判定;永不抛异常。 */
+  check(text: string): GuardrailResult;
+  /** 丢弃缓存,下次 check 重新加载(测试用)。 */
+  refresh(): void;
+}
+
+/**
+ * 审计 F1 修复的载体:把「策略加载 + 判定」收拢为单一入口,入站消息与 approval
+ * 共用同一个 policy 实例。
+ *
+ * - guardrailsFile 未配置/空串 → 仅内置规则。
+ * - 每次 check 仅 stat 一次;mtimeMs+size 签名未变 → 用缓存(不重复解析/打日志),
+ *   变了 → 热加载并重放解析告警。
+ * - fail-loud(非 fail-closed):文件读不到 → 每次「状态迁移」打一条错误日志并回退
+ *   内置规则继续判定(消息应答不中断);恢复后打一条 recovered 日志。
+ */
+export function createGuardrailPolicy(opts: {
+  guardrailsFile?: string;
+  onLog?: (msg: string) => void;
+}): GuardrailPolicy {
+  const log = opts.onLog ?? (() => {});
+  const file = opts.guardrailsFile?.trim() || undefined;
+  let cache: { sig: string; rules: GuardrailRule[] } | null = null;
+  let errored = false;
+
+  const load = (): GuardrailRule[] => {
+    const st = fs.statSync(file as string);
+    const content = fs.readFileSync(file as string, "utf8");
+    const sig = `${st.mtimeMs}:${st.size}`;
+    if (cache && cache.sig === sig) return cache.rules;
+    const parsed = parseGuardrailRules(content);
+    for (const w of parsed.warnings) log(`[guardrails] policy warning: ${w}`);
+    if (errored) log(`[guardrails] guardrailsFile recovered: ${parsed.rules.length} rules loaded`);
+    cache = { sig, rules: parsed.rules };
+    errored = false;
+    return cache.rules;
+  };
+
+  return {
+    check(text: string): GuardrailResult {
+      const rules: GuardrailRule[] = [...BLOCK_PATTERNS];
+      if (file) {
+        try {
+          rules.push(...load());
+        } catch (e) {
+          if (!errored) {
+            log(
+              `[guardrails] guardrailsFile unreadable (${file}): ` +
+                `${e instanceof Error ? e.message : String(e)} — continuing with built-ins only`,
+            );
+          }
+          errored = true;
+          cache = null;
+        }
+      }
+      return firstMatch(rules, text);
+    },
+    refresh() {
+      cache = null;
+    },
+  };
 }
 
 /**
