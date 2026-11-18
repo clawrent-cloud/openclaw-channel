@@ -333,7 +333,6 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       if (gistHit?.blocked) logMetaHit("gist", gistHit);
       if (rosterHit?.blocked) logMetaHit("roster", rosterHit);
       const gistSafe = gistHit?.blocked ? "" : gist;
-      const rosterSafe = rosterHit?.blocked ? "" : sanitizeUntrustedText(rosterFull, 1000);
       const untrusted = {
         addressedToMe,
         sender: {
@@ -347,14 +346,13 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
         participantId: session?.participantId,
         roster: rosterHit?.blocked ? [] : roster,
       };
-      // Inject the context as a preamble in the agent-facing text so the model literally
-      // sees it (also available structured on ctxPayload.ChannelStructuredContext).
+      // MCP06 #1(0.9.3 方案 B):前导只保留平台盖章的非自由文本信号 —— 任务描述/参与者
+      // 名/owner 名一律不拼进 BodyForAgent,只走 ChannelStructuredContext(9.x 以带标签
+      // 不可信块呈现;7.x 旧宿主不渲染结构化通道,agent 无会话概要,寻址信号仍在)。
       const textForAgentContent =
         `[被@: ${addressedToMe ? "是" : "否"}] ` +
-        `[发送方: ${untrusted.sender.side ?? "unknown"}] ` +
-        (gistSafe ? `[会话: ${gistSafe}] ` : "") +
+        `[发送方: ${sanitizeUntrustedText(String(untrusted.sender.side ?? "unknown"))}] ` +
         `[mentions: ${mentions.length}]` +
-        (rosterSafe ? ` [参与者: ${rosterSafe}]` : "") +
         `\n${content}`;
 
       const ctxPayload: Record<string, unknown> = {
