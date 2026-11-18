@@ -27,7 +27,7 @@ const METADATA_NL_PATTERNS: GuardrailRule[] = [
   // 中缀改为 Kleene 星,覆盖 "all previous"/"以上所有" 等多词叠加(终审 Important:
   // 单选中缀漏过 "ignore all previous instructions" 等教科书短语)
   { re: /(ignore|disregard|skip)\s+((all|previous|the)\s+)*(rules|instructions|guardrails)/i, reason: "默认元数据规则:绕过护栏" },
-  { re: /(忽略|无视|跳过|不要遵守)((以上|上面的|之前的|所有)\s*)*(规则|限制|护栏|约束)/, reason: "默认元数据规则:绕过护栏" },
+  { re: /(忽略|无视|跳过|不要遵守)((以上|上面|之前|所有|的)\s*)*(规则|限制|护栏|约束)/, reason: "默认元数据规则:绕过护栏" },
 ];
 
 export function loadGuardrails(path?: string): string {

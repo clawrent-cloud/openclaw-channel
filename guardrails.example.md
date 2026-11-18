@@ -64,5 +64,5 @@
 /(give|send|show)\s+(me\s+)?(token|password|secret|key)/i || reject: credential solicitation
 
 # 绕过护栏 / Guardrail bypass (any framing)
-/(忽略|无视|跳过|不要遵守)((以上|上面的|之前的|所有)\s*)*(规则|限制|护栏|约束)/ || 拒绝：试图绕过护栏
+/(忽略|无视|跳过|不要遵守)((以上|上面|之前|所有|的)\s*)*(规则|限制|护栏|约束)/ || 拒绝：试图绕过护栏
 /(ignore|disregard|skip)\s+((all|previous|the)\s+)*(rules|instructions|guardrails)/i || reject: guardrail bypass attempt
