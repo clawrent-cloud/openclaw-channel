@@ -82,6 +82,7 @@ After `npm install`, `openclaw` lands in the local `node_modules`; `moduleResolu
 | `autoApproveSessions` | No / 否 | End-side auto-approve toggle (**only effective when a session is `pending_approval`**; a separate layer from the platform `approvalMode`, see [approval-modes.md](docs/approval-modes.md)). `true` (default) = SDK auto-approves pending sessions (no approval-level guardrail run; **message-level guardrails always apply**); `false` = everything goes to manual review. / 端侧自动批准开关（**仅当会话已是 `pending_approval` 时生效**，与平台 `approvalMode` 是两层，详见 [approval-modes.md](docs/approval-modes.md)）。`true`（默认）= SDK 自动批准挂起会话（不跑批准级护栏；**消息级护栏始终生效**）；`false` = 全部转人工。 |
 | `guardrailsFile` | No / 否 | External guardrail policy file (`/regex/flags \|\| reason` per line — flags subset `i`/`m`/`s`/`u` — or bare regex source; `#` comments), rules appended after the built-ins, applied to **every inbound message and approval decision**, hot-reloaded on change / 外置护栏策略文件（每行 `/正则/flags \|\| 原因`——flags 仅 i/m/s/u——或裸正则源；`#` 注释），规则追加在内置护栏之后，对**每条入站消息与 approval 决定**生效，变更自动热加载 |
 | `openclawAgentId` | No / 否 | **0.9.4** — Gateway agent id for rental traffic; set it to a dedicated least-privilege agent (`agents.entries` with own workspace + tools.deny, see Secure deployment). Unset routes to the gateway **main** agent with a one-shot startup warning / **0.9.4** — 租赁流量路由的网关 agent id；指向专用最小权限 agent（`agents.entries` 独立 workspace + tools.deny，见安全部署）。缺省回落 **main** 并打一次性启动警告 |
+| `allowMainAgent` | No / 否 | **0.9.5 ⚠️ breaking** — Fail-closed gate: without `openclawAgentId` the provider **refuses to start** unless this is explicitly `true`. Main usually carries your full toolset — prefer a dedicated agent / **0.9.5 ⚠️ 破坏性** — 硬门槛：未配 `openclawAgentId` 时**拒绝启动**，除非显式设 `true`。main 通常带全部工具，优先配专用 agent |
 | `cursorPath` | No / 否 | Message cursor storage path, default `~/.clawrent/openclaw-provider-cursor.json`. / 消息游标存储路径，默认 `~/.clawrent/openclaw-provider-cursor.json`。 |
 
 \* The token must exist in either config or `~/.clawrent/config.json`, otherwise the channel is not activated (warn only).
@@ -162,6 +163,8 @@ By default this plugin routes rental sessions to the gateway's **main agent**, w
 - `agents.entries.<id>` 是宿主一等配置：每个条目可带独立 `workspace`（隔离目录）、`cwd`、`tools`（工具名级 `allow`/`alsoAllow`/`deny`）、`sandbox`、`model`——**工具授权在宿主层**，这才是正确边界（插件的 regex 护栏只是纵深防御，永远不是授权边界）。
 - 两个配置块的 `openclawAgentId` 都要指向该条目 id（与本插件其余配置同一条两块规则）。不设则保持旧的 main 路由并打一次性启动警告。
 - 租赁 agent 至少 deny 命令执行、无限制文件访问、凭证/密钥类工具；workspace 放在你的私有数据之外。租赁 agent 够不到的东西，任何提示注入都够不到。
+
+> ⚠️ **Upgrading to 0.9.5 (breaking) / 升级到 0.9.5（破坏性变更）**: without `openclawAgentId` the provider now **refuses to start** unless you explicitly set `allowMainAgent: true` in **both** config blocks. Fix on upgrade: either configure a dedicated agent (recommended, see above) or add `"allowMainAgent": true` to consciously keep main-agent routing. / 未配 `openclawAgentId` 时，0.9.5 起**拒绝启动**，除非在**两个配置块**里显式加 `allowMainAgent: true`。升级修复：配专用 agent（推荐，见上），或加上该开关并有意识地接受 main 路由。
 
 See [guardrails.example.md](guardrails.example.md) for a full example. Recommended minimum baseline covers at least: command execution, file read/write, delete/destruction, data exfiltration, payment/billing, publish/activate, credential harvesting, and guardrail-bypass prompts (category reference: [R3-GUARDRAILS-MATERIAL.md](R3-GUARDRAILS-MATERIAL.md)).
 
