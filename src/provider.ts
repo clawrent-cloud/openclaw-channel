@@ -19,7 +19,7 @@
 
 import { createGuardrailPolicy, prefilter, phase1Triage, sanitizeUntrustedText, type GuardrailResult } from "./guardrails.js";
 import { isAddressedToMe, computeUsageTotal, sessionIdFromKey } from "./group-routing.js";
-import { applyRosterFrame, formatRosterForPreamble, type RosterCache, type RosterEntry } from "./roster-cache.js";
+import { applyRosterFrame, formatRosterLine, type RosterCache, type RosterEntry } from "./roster-cache.js";
 import { onDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 
 export interface ProviderRuntimeDeps {
@@ -313,7 +313,7 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       // MCP06 #3:会话元数据进 agent 上下文前先清洗(控制字符压平/超长截断),伪前导标记失去载体。
       const rawGist = String(session?.taskDescription ?? "");
       const gist = rawGist ? sanitizeUntrustedText(rawGist) : "";
-      const rosterLine = formatRosterForPreamble(roster);
+      const rosterLine = formatRosterLine(roster);
       // 检查必须覆盖整行:截断窗口之外的敌意文本会漏检,而结构化通道交付的是完整 roster
       // (终审 Important:检查串≠交付串的窗口缺口)。1000 上限只作用于前导渲染。
       const rosterFull = rosterLine ? sanitizeUntrustedText(rosterLine, Infinity) : "";

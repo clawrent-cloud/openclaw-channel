@@ -1,4 +1,5 @@
 // roster-cache.ts — 支柱 C(plugin 侧):会话级 participant 名单缓存。
+import { sanitizeUntrustedText } from "./guardrails.js";
 //
 // 数据源(经 ProviderClient 两条通道到达,均在此归一):
 //   - onMessage(session:message):system.roster(connect 快照,含 ownerName)、
@@ -6,8 +7,8 @@
 //   - 'session:presence' 事件:system.participant_joined/left(增量)
 //
 // 纯函数、无副作用:provider.ts 持有 Map<sessionId, RosterEntry[]>,每帧调用
-// applyRosterFrame 维护;回复时把缓存注入 ChannelStructuredContext + 前导文案,
-// agent 据此知道"会话里都有谁、谁从属谁"。
+// applyRosterFrame 维护;缓存经 ChannelStructuredContext 注入(0.9.3 起不进前导),
+// agent 据此知道"会话里都有谁、谁从属谁";display/ownerName 入缓存即清洗。
 //
 // 生命周期边界(终审 F5,接受):本 agent 被 pause(4020,SDK 停止重连)期间会话被
 // end,无连接可投递 4021 → onSessionEnded 不触发,该会话条目留存至插件重启
@@ -44,7 +45,9 @@ function applySnapshot(cache: RosterCache, sessionId: string, payload: FramePayl
   cache.set(sessionId, entries);
 }
 
-/** 单个 participant 载荷(system.roster 条目 / participant_joined.participant)→ RosterEntry。 */
+/** 单个 participant 载荷(system.roster 条目 / participant_joined.participant)→ RosterEntry。
+ *  0.9.3(minor sweep):display/ownerName 入缓存即过 sanitizeUntrustedText —— 结构化通道
+ *  交付的就是这份缓存,压平在入口做,下游(检查串/结构化 payload)无需各自设防。 */
 function normalizeEntry(item: unknown): RosterEntry | null {
   if (!item || typeof item !== "object") return null;
   const o = item as Record<string, unknown>;
@@ -56,9 +59,10 @@ function normalizeEntry(item: unknown): RosterEntry | null {
     participantId,
     type,
     side: typeof o["side"] === "string" ? o["side"] : "",
-    display,
+    display: display ? sanitizeUntrustedText(display, 128) : null,
     agentId: typeof o["agentId"] === "string" ? o["agentId"] : null,
-    ownerName: typeof o["ownerName"] === "string" ? o["ownerName"] : null,
+    ownerName:
+      typeof o["ownerName"] === "string" && o["ownerName"] ? sanitizeUntrustedText(o["ownerName"], 64) : null,
   };
 }
 
@@ -135,11 +139,12 @@ export function applyRosterFrame(
 const SIDE_LABEL: Record<string, string> = { provider: "供方", consumer: "消费者" };
 
 /**
- * 名单 → agent 前导的一行紧凑文案(如 `Alice(消费者) · Pink Bot(供方·Zhzago)`)。
+ * 名单 → 一行紧凑文案(如 `Alice(消费者) · Pink Bot(供方·Zhzago)`)。
+ * 0.9.3 起不进 agent 前导,仅作为元数据策略的**检查串**(命中即整名单从结构化通道剥离);
  * display 缺失回退 participantId 前 8 位;agent 带 ownerName 时以 `·` 标从属;
- * paused 条目追加 `·已暂停`。空名单返回空字符串(调用方不注入该行)。
+ * paused 条目追加 `·已暂停`。空名单返回空字符串。
  */
-export function formatRosterForPreamble(entries: RosterEntry[]): string {
+export function formatRosterLine(entries: RosterEntry[]): string {
   const parts = entries.map((e) => {
     const name = e.display && e.display.trim() ? e.display : e.participantId.slice(0, 8);
     const side = SIDE_LABEL[e.side] ?? e.side;
