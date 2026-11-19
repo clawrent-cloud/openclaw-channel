@@ -36,6 +36,8 @@ export interface StartProviderOptions {
   agentId?: string;
   autoApprove: boolean;
   guardrailsFile?: string; // 外置护栏策略文件(追加在内置规则之后)
+  /** MCP07:租赁流量路由到的网关 agent id;缺省回落 main(打启动警告,见 README 安全部署)。 */
+  openclawAgentId?: string;
   channelId: string;
   accountId: string;
   cfg: any; // OpenClawConfig(从 runtime 取)
@@ -122,6 +124,17 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
   // 审计 F1 修复:策略加载+判定收拢为单一 policy 实例,入站消息与 approval 共用,
   // 外部 guardrailsFile 规则对两者同等生效(缓存 + 热加载 + fail-loud 回退内置)。
   const guardrailPolicy = createGuardrailPolicy({ guardrailsFile: opts.guardrailsFile, onLog: log });
+
+  // MCP07 #1(软门槛,0.9.4):未指定网关 agent 时租赁流量落在宿主 main agent(全量工具/
+  // 工作区)。不 breaking——一次性启动警告 + 指引专用受限 agent(agents.entries)。
+  if (!opts.openclawAgentId) {
+    log(
+      "WARNING: no openclawAgentId configured — rental sessions route to the gateway MAIN agent " +
+        "with its full tool access. Create a dedicated least-privilege agent (agents.entries with " +
+        "its own workspace and tools.deny) and set openclawAgentId in both config blocks. " +
+        'See README "Secure deployment".',
+    );
+  }
 
   // 动态 import,避免插件在未安装 @clawrent/provider 时整体加载失败。
   let ProviderClient: any;
@@ -299,11 +312,12 @@ export async function startProvider(opts: StartProviderOptions): Promise<Provide
       }
 
       // 驱动 OpenClaw agent 跑一个 inbound turn。
-      // OpenClaw 2026.9 canonical route session key (agent:<agent>:<channel>:direct:<peer>).
+      // OpenClaw 2026.9 canonical route session key (agent:<agent>:<channel>:direct:<peer>)。
+      // 0.9.4:agent 段可经 openclawAgentId 配置(专用受限 agent);缺省 main(启动已警告)。
       // 7.1 treats session keys as opaque strings (no validation), so this is safe on the
       // >=2026.7.1 floor; 9.3 REFUSES non-canonical writes (SessionCanonicalKeyMigrationRequiredError).
       // Peer id = ClawRent sessionId (UUID, lowercased to satisfy key normalization).
-      const routeSessionKey = buildRouteSessionKey(sessionId);
+      const routeSessionKey = buildRouteSessionKey(sessionId, opts.openclawAgentId);
       const consumerId = session?.consumerUserId ?? "consumer";
 
       // D2: ChannelStructuredContext — sender / mentions / gist / @-addressing. With the

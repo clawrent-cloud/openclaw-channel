@@ -34,7 +34,7 @@ import { startProvider } from "./provider.js";
 
 const SESSION = { sessionId: "s1", participantId: "p1", consumerUserId: "u1" };
 
-async function boot(guardrailsFile?: string) {
+async function boot(guardrailsFile?: string, extra?: { openclawAgentId?: string }) {
   const logs: string[] = [];
   const dispatches: Array<{ raw: { textForAgent: string; content: string }; turn: unknown }> = [];
   const handle = await startProvider({
@@ -42,6 +42,7 @@ async function boot(guardrailsFile?: string) {
     cursorPath: path.join(os.tmpdir(), "cursor.json"),
     autoApprove: true,
     guardrailsFile,
+    openclawAgentId: extra?.openclawAgentId,
     channelId: "clawrent",
     accountId: "acc1",
     cfg: {},
@@ -145,6 +146,28 @@ describe("provider guardrail wiring (audit F1 regression)", () => {
 
     expect(dispatches).toHaveLength(1); // 正常消息照常应答
     expect(logs.filter((m) => m.includes("guardrailsFile unreadable"))).toHaveLength(1);
+    handle.stop();
+  });
+});
+
+describe("openclawAgentId routing + main-agent warning (MCP07 #1 soft)", () => {
+  it("unconfigured: routes to main unchanged, exactly one startup WARNING", async () => {
+    const { logs, dispatches, handle } = await boot(undefined);
+    expect(logs.filter((m) => m.includes("WARNING") && m.includes("MAIN agent"))).toHaveLength(1);
+    await (captured.onMessage as (s: unknown, m: unknown) => Promise<void>)(SESSION, dialogue("hello there"));
+    expect(dispatches).toHaveLength(1);
+    const ctxPayload = (dispatches[0].turn as { ctxPayload: { SessionKey: string } }).ctxPayload;
+    expect(ctxPayload.SessionKey).toBe("agent:main:clawrent:direct:s1");
+    handle.stop();
+  });
+
+  it("configured: routes to the dedicated gateway agent, no warning", async () => {
+    const { logs, dispatches, handle } = await boot(undefined, { openclawAgentId: "clawrent-rental" });
+    expect(logs.filter((m) => m.includes("MAIN agent"))).toHaveLength(0);
+    await (captured.onMessage as (s: unknown, m: unknown) => Promise<void>)(SESSION, dialogue("hello there"));
+    expect(dispatches).toHaveLength(1);
+    const ctxPayload = (dispatches[0].turn as { ctxPayload: { SessionKey: string } }).ctxPayload;
+    expect(ctxPayload.SessionKey).toBe("agent:clawrent-rental:clawrent:direct:s1");
     handle.stop();
   });
 });

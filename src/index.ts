@@ -149,6 +149,8 @@ function serveAgents(opts: ServeOptions): void {
   const useGroupChannel: boolean = opts.config.useGroupChannel ?? true;
   const triagePrefilter: boolean | undefined = opts.config.triagePrefilter;
   const triageTwoPhase: boolean | undefined = opts.config.triageTwoPhase;
+  // MCP07(0.9.4):租赁流量路由的网关 agent id;缺省 main(provider 侧打启动警告)。
+  const openclawAgentId: string | undefined = opts.config.openclawAgentId;
   const baseCursorPath: string =
     opts.config.cursorPath ?? path.join(homedir(), ".clawrent", "openclaw-provider-cursor.json");
 
@@ -166,6 +168,7 @@ function serveAgents(opts: ServeOptions): void {
         agentId: entry.agentId,
         autoApprove,
         guardrailsFile,
+        openclawAgentId,
         channelId: CHANNEL_ID,
         accountId,
         cfg: opts.cfg,
