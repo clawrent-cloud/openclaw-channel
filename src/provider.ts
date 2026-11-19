@@ -82,8 +82,8 @@ function extractDialogue(message: Record<string, unknown>): { type: string; cont
 /**
  * D2 上下文 → OpenClaw ChannelStructuredContext entries（2026.9 channel contract）。
  * 旧字段名 UntrustedStructuredContext 的移除窗口 2026-09-08 已过；9.3 运行时只认
- * entries 数组形状。7.1 宿主不认识新字段 → 退化为 BodyForAgent preamble 通道，
- * 与 9.3 修复前状态一致（两个宿主时代行为对齐，见 plan Task 6 差异表）。
+ * entries 数组形状。7.1 宿主不认识该字段 → 0.9.3 起结构化通道内容对旧宿主不可见
+ * （自由文本元数据也不再进前导，属安全取舍，见 README Guardrails 节）。
  */
 export interface ClawRentSessionContext {
   addressedToMe: boolean;

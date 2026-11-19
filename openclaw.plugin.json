@@ -110,7 +110,7 @@
         },
         "guardrailsFile": {
           "label": "Guardrails file",
-          "help": "外置护栏策略文件(每行 `/regex/ || 原因`,# 开头为注释)。规则追加在内置护栏之后,实现策略外置。"
+          "help": "外置护栏策略文件。每行两种格式:`/正则/flags || 原因`(flags 仅 i/m/s/u,大小写不敏感恒开)或裸正则 `正则 || 原因`;# 注释;非法行跳过并按行号告警;文件变更热加载;读不到时回退内置并打一条错误。规则对消息/approval/会话元数据(元数据另含凭据索取与绕过护栏的中英默认规则)生效。"
         },
         "triagePrefilter": {
           "label": "Triage: prefilter (silent-drop)",

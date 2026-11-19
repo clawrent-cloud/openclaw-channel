@@ -27,6 +27,15 @@
 #   - 文件读不到时打一条错误日志并回退内置规则，消息应答不中断（fail-loud，
 #     非 fail-closed）/ unreadable file logs one error and falls back to built-ins
 #
+# 注意 / Notes:
+#   - ⚠️ 正则由你本地提供并被逐条 .test：请避免灾难性回溯写法（如 (a|aa)+$ 嵌套量词），
+#     JS 引擎无匹配超时，坏正则会卡住事件循环 / operator-supplied regexes are evaluated
+#     with .test and JS has no match timeout — avoid catastrophic-backtracking patterns
+#   - 0.9.1 起以 `/` 开头的 pattern 一律按斜杠定界解析；旧版"前导斜杠字面量"写法
+#     （如 `/etc/passwd || r`）会按未闭合定界告警跳过，请改写为转义或裸正则 /
+#     since 0.9.1 leading-`/` patterns are parsed as slash-delimited; legacy
+#     leading-slash literals are skipped with a line-numbered warning
+#
 # 内置护栏（不可关闭，此处仅列出供参考）/ Built-in (non-disableable, listed for reference):
 #   instruction.exec / instruction.read_file / instruction.write_file
 
