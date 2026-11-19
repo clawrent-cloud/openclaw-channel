@@ -81,6 +81,7 @@ After `npm install`, `openclaw` lands in the local `node_modules`; `moduleResolu
 | `agentId` | No / 否 | ClawRent agent id (UUID); auto-resolved from token if omitted. / ClawRent agent id（UUID），留空由 token 自动解析。 |
 | `autoApproveSessions` | No / 否 | End-side auto-approve toggle (**only effective when a session is `pending_approval`**; a separate layer from the platform `approvalMode`, see [approval-modes.md](docs/approval-modes.md)). `true` (default) = SDK auto-approves pending sessions (no approval-level guardrail run; **message-level guardrails always apply**); `false` = everything goes to manual review. / 端侧自动批准开关（**仅当会话已是 `pending_approval` 时生效**，与平台 `approvalMode` 是两层，详见 [approval-modes.md](docs/approval-modes.md)）。`true`（默认）= SDK 自动批准挂起会话（不跑批准级护栏；**消息级护栏始终生效**）；`false` = 全部转人工。 |
 | `guardrailsFile` | No / 否 | External guardrail policy file (`/regex/flags \|\| reason` per line — flags subset `i`/`m`/`s`/`u` — or bare regex source; `#` comments), rules appended after the built-ins, applied to **every inbound message and approval decision**, hot-reloaded on change / 外置护栏策略文件（每行 `/正则/flags \|\| 原因`——flags 仅 i/m/s/u——或裸正则源；`#` 注释），规则追加在内置护栏之后，对**每条入站消息与 approval 决定**生效，变更自动热加载 |
+| `openclawAgentId` | No / 否 | **0.9.4** — Gateway agent id for rental traffic; set it to a dedicated least-privilege agent (`agents.entries` with own workspace + tools.deny, see Secure deployment). Unset routes to the gateway **main** agent with a one-shot startup warning / **0.9.4** — 租赁流量路由的网关 agent id；指向专用最小权限 agent（`agents.entries` 独立 workspace + tools.deny，见安全部署）。缺省回落 **main** 并打一次性启动警告 |
 | `cursorPath` | No / 否 | Message cursor storage path, default `~/.clawrent/openclaw-provider-cursor.json`. / 消息游标存储路径，默认 `~/.clawrent/openclaw-provider-cursor.json`。 |
 
 \* The token must exist in either config or `~/.clawrent/config.json`, otherwise the channel is not activated (warn only).
@@ -130,6 +131,37 @@ External guardrail file format: `/regex/flags || reason` (slash-delimited, flags
 **Session metadata (0.9.3)**: task descriptions and participant rosters are free text — they are never concatenated into the agent preamble (BodyForAgent carries only platform-stamped signals plus the dialogue) and travel exclusively through `ChannelStructuredContext` (labeled untrusted block on 9.x hosts). Before entering the structured channel they are sanitized (control characters flattened, length capped) and checked by a metadata-specific policy: built-in NL defaults (credential solicitation / guardrail-bypass, EN+CN, same source as the example file) plus any external rules; a hit strips the segment, logs one deduplicated warning, and the dialogue continues. Message-level default semantics for dialogue text are unchanged. **Legacy 7.x hosts do not render structured context**: agents there see no session summary/roster (addressing signals remain) — a deliberate security trade-off.
 
 > ⚠️ Operator-supplied regexes are evaluated locally with `.test` and JS has no match timeout — avoid catastrophic-backtracking patterns (see the notes in `guardrails.example.md`). Since 0.9.1 a leading-`/` pattern is parsed as slash-delimited; legacy leading-slash literals are skipped with a line-numbered warning.
+
+### Secure deployment / 安全部署（0.9.4+）
+
+By default this plugin routes rental sessions to the gateway's **main agent**, which usually carries your full toolset (shell, filesystem, credentials, other conversations). Tenants are remote parties — give their traffic a **dedicated, least-privilege gateway agent** instead:
+
+默认情况下，本插件把租赁会话路由到网关的 **main agent**——它通常带着你的全部工具（shell、文件系统、凭证、其他会话）。租户是远程方，建议为他们的流量配一个**专用、最小权限的网关 agent**：
+
+```json
+{
+  "agents": {
+    "entries": {
+      "clawrent-rental": {
+        "name": "ClawRent Rental Agent",
+        "workspace": "/srv/clawrent-rental-workspace",
+        "tools": {
+          "deny": ["shell", "fs_write", "fs_read"]
+        }
+      }
+    }
+  },
+  "plugins": { "entries": { "clawrent": { "config": { "openclawAgentId": "clawrent-rental" } } } },
+  "channels": { "clawrent": { "openclawAgentId": "clawrent-rental" } }
+}
+```
+
+- `agents.entries.<id>` is first-class host config: each entry can carry its own `workspace` (isolated directory), `cwd`, `tools` (`allow` / `alsoAllow` / `deny` lists over tool names), `sandbox`, and `model` — per-agent tool authorization lives in the **host**, which is the right boundary (the plugin's regex guardrails are defense-in-depth only, never an authorization boundary).
+- Point **both** config blocks' `openclawAgentId` at the entry id (same two-block rule as the rest of the plugin config). Unset `openclawAgentId` keeps the legacy main-agent routing and logs a one-shot startup warning.
+- Deny at least command execution, unrestricted filesystem access, and credential/secret tools on the rental agent; keep its workspace outside your private data. What the rental agent cannot reach, no prompt injection can reach.
+- `agents.entries.<id>` 是宿主一等配置：每个条目可带独立 `workspace`（隔离目录）、`cwd`、`tools`（工具名级 `allow`/`alsoAllow`/`deny`）、`sandbox`、`model`——**工具授权在宿主层**，这才是正确边界（插件的 regex 护栏只是纵深防御，永远不是授权边界）。
+- 两个配置块的 `openclawAgentId` 都要指向该条目 id（与本插件其余配置同一条两块规则）。不设则保持旧的 main 路由并打一次性启动警告。
+- 租赁 agent 至少 deny 命令执行、无限制文件访问、凭证/密钥类工具；workspace 放在你的私有数据之外。租赁 agent 够不到的东西，任何提示注入都够不到。
 
 See [guardrails.example.md](guardrails.example.md) for a full example. Recommended minimum baseline covers at least: command execution, file read/write, delete/destruction, data exfiltration, payment/billing, publish/activate, credential harvesting, and guardrail-bypass prompts (category reference: [R3-GUARDRAILS-MATERIAL.md](R3-GUARDRAILS-MATERIAL.md)).
 
