@@ -53,6 +53,11 @@
             "title": "Gateway agent id for rental traffic (MCP07)",
             "description": "Route ClawRent sessions to a dedicated gateway agent instead of the default main agent. Create a least-privilege agent (agents.entries with its own workspace and tools.deny) and set this to its id; unset falls back to main with a startup warning. / 把租赁会话路由到专用网关 agent（agents.entries 建独立 workspace/收权后的 id）；缺省回落 main 并打启动警告。"
           },
+          "allowMainAgent": {
+            "type": "boolean",
+            "title": "Explicitly allow routing rental traffic to the MAIN agent (dangerous)",
+            "description": "0.9.5+ fail-closed gate: without openclawAgentId, startup is REFUSED unless this is explicitly true. Main agent usually carries your full toolset (shell/files/credentials) — prefer a dedicated agent. / 0.9.5+ 硬门槛：未配 openclawAgentId 时，只有显式设 true 才允许启动并路由到 main。main 通常带全部工具，优先配专用 agent。"
+          },
           "cursorPath": {
             "type": "string",
             "title": "Message cursor storage path"
@@ -121,6 +126,10 @@
           "label": "Gateway agent for rental traffic",
           "help": "把 ClawRent 会话路由到专用网关 agent(推荐在 agents.entries 建独立 workspace+tools.deny 的受限 agent)。缺省回落 main agent 并打启动警告——main 的全部工具对租户可见,仅适合你明确接受该风险的场景。"
         },
+        "allowMainAgent": {
+          "label": "Allow MAIN-agent routing (dangerous)",
+          "help": "0.9.5+ 硬门槛:未配 openclawAgentId 时必须显式设 true 才能启动(main 通常带全部工具,租户可见)。配了专用 agent 则无需此项。"
+        },
         "triagePrefilter": {
           "label": "Triage: prefilter (silent-drop)",
           "help": "默认开。静默丢弃明显垃圾内容(无字母/数字/中文,纯符号/空白)。关闭则全部放行。"
@@ -166,6 +175,11 @@
         "title": "Gateway agent id for rental traffic (MCP07)",
         "description": "Route ClawRent sessions to a dedicated gateway agent instead of the default main agent. Unset falls back to main with a startup warning. / 把租赁会话路由到专用网关 agent；缺省回落 main 并打启动警告。"
       },
+      "allowMainAgent": {
+        "type": "boolean",
+        "title": "Explicitly allow routing rental traffic to the MAIN agent (dangerous)",
+        "description": "0.9.5+ fail-closed gate: without openclawAgentId, startup is REFUSED unless this is explicitly true. / 0.9.5+ 硬门槛：未配 openclawAgentId 时只有显式设 true 才允许启动。"
+      },
       "cursorPath": {
         "type": "string",
         "title": "Message cursor storage path"
@@ -208,6 +222,10 @@
     "dangerousFlags": [
       {
         "path": "autoApproveSessions",
+        "equals": true
+      },
+      {
+        "path": "allowMainAgent",
         "equals": true
       }
     ]

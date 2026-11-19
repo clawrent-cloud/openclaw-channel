@@ -38,6 +38,11 @@ export interface StartProviderOptions {
   guardrailsFile?: string; // 外置护栏策略文件(追加在内置规则之后)
   /** MCP07:租赁流量路由到的网关 agent id;缺省回落 main(打启动警告,见 README 安全部署)。 */
   openclawAgentId?: string;
+  /**
+   * MCP07 #2(0.9.5 硬门槛):显式确认"租赁流量可落 main agent"。未配 openclawAgentId
+   * 且未开此项 → startProvider 直接拒绝(扫描器验收标准:默认关闭的危险选项确认)。
+   */
+  allowMainAgent?: boolean;
   channelId: string;
   accountId: string;
   cfg: any; // OpenClawConfig(从 runtime 取)
@@ -120,6 +125,17 @@ export function buildRouteSessionKey(sessionId: string, agentId = "main"): strin
 
 export async function startProvider(opts: StartProviderOptions): Promise<ProviderHandle> {
   const log = (m: string) => (opts.onLog ? opts.onLog(m) : console.log(`[clawrent:provider] ${m}`));
+
+  // MCP07 #2(0.9.5 硬门槛):无专用 agent 且未显式确认 main 路由 → 拒启(fail-closed)。
+  // 资源尚未创建(在动态 import/ProviderClient 之前);上层 catch 记日志,gateway 侧按
+  // 持久配置错误走 bounded restart 后放弃——与坏 token 401 同路径。
+  if (!opts.openclawAgentId && !opts.allowMainAgent) {
+    throw new Error(
+      "clawrent: refusing to start — rental sessions would route to the gateway MAIN agent with its full tool access. " +
+        "Set openclawAgentId to a dedicated least-privilege agent (see README \"Secure deployment\"), " +
+        "or set allowMainAgent: true in both config blocks to explicitly accept main-agent routing.",
+    );
+  }
 
   // 审计 F1 修复:策略加载+判定收拢为单一 policy 实例,入站消息与 approval 共用,
   // 外部 guardrailsFile 规则对两者同等生效(缓存 + 热加载 + fail-loud 回退内置)。

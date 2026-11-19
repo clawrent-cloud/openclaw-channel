@@ -43,6 +43,7 @@ async function boot(guardrailsFile?: string, extra?: { openclawAgentId?: string 
     autoApprove: true,
     guardrailsFile,
     openclawAgentId: extra?.openclawAgentId,
+    allowMainAgent: true, // 测试默认代表"已显式确认 main 路由"形态;门槛本身有专测
     channelId: "clawrent",
     accountId: "acc1",
     cfg: {},
@@ -151,6 +152,23 @@ describe("provider guardrail wiring (audit F1 regression)", () => {
 });
 
 describe("openclawAgentId routing + main-agent warning (MCP07 #1 soft)", () => {
+  it("hard gate: no agent and no allowMainAgent → startup refused with migration guidance (0.9.5)", async () => {
+    const logs: string[] = [];
+    await expect(
+      startProvider({
+        agentToken: "tok",
+        cursorPath: path.join(os.tmpdir(), "cursor.json"),
+        autoApprove: true,
+        channelId: "clawrent",
+        accountId: "a",
+        cfg: {},
+        useGroupChannel: true,
+        deps: { runChannelInboundEvent: async () => {}, recordInboundSession: async () => {}, dispatchReplyWithBufferedBlockDispatcher: async () => ({}) },
+        onLog: (m: string) => logs.push(m),
+      }),
+    ).rejects.toThrow(/allowMainAgent|openclawAgentId/);
+  });
+
   it("unconfigured: routes to main unchanged, exactly one startup WARNING", async () => {
     const { logs, dispatches, handle } = await boot(undefined);
     expect(logs.filter((m) => m.includes("WARNING") && m.includes("MAIN agent"))).toHaveLength(1);
