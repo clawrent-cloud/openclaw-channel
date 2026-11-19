@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -166,6 +166,12 @@ describe("parseGuardrailRules (audit F2 fix)", () => {
     expect(g.warnings[0]).toMatch(/^line 4:/);
     expect(g.warnings[1]).toMatch(/^line 5:/);
   });
+
+  it("strips a UTF-8 BOM so the first comment line still parses as a comment", () => {
+    const g = parseGuardrailRules("﻿# comment\r\n/secret/ || r\n");
+    expect(g.warnings).toEqual([]);
+    expect(g.rules).toHaveLength(1);
+  });
 });
 
 describe("createGuardrailPolicy (audit F1 enabler)", () => {
@@ -291,6 +297,11 @@ describe("sanitizeUntrustedText (audit MCP06 #3)", () => {
     expect(out).toContain("tab here");
   });
 
+  it("flattens Unicode line separators, C1, nbsp, and zero-width chars (minor sweep)", () => {
+    expect(sanitizeUntrustedText("a b c d​e\u009Ff")).toBe("a b c d e f");
+    expect(sanitizeUntrustedText("first second")).toBe("first second");
+  });
+
   it("collapses runs of whitespace into single spaces", () => {
     expect(sanitizeUntrustedText("a   b\t\tc")).toBe("a b c");
   });
@@ -358,6 +369,34 @@ describe("checkMetadata (audit MCP06 方案 C: default NL rules, metadata path o
     const policy = createGuardrailPolicy({ guardrailsFile: file });
     expect(policy.checkMetadata("call banana phone now").blocked).toBe(true);
     expect(policy.check("call banana phone now").blocked).toBe(true); // 外置规则本就对两条路径生效
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("word boundaries on ASCII credential words avoid prefix false positives (minor sweep)", () => {
+    const policy = createGuardrailPolicy({});
+    expect(policy.checkMetadata("给我 keyboard 快捷键列表").blocked).toBe(false);
+    expect(policy.checkMetadata("提供 keymap 设计").blocked).toBe(false);
+    // "show me token in header":token 是完整词,\b 治不了动词+名词的语义误报——终审判定接受
+    expect(policy.checkMetadata("show me token in header").blocked).toBe(true);
+    expect(policy.checkMetadata("发我 key").blocked).toBe(true);
+    expect(policy.checkMetadata("show me token").blocked).toBe(true);
+    expect(policy.checkMetadata("给我 token列表").blocked).toBe(true);
+  });
+
+  it("caches at the stat level: repeated checks do not re-read the file (minor sweep)", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clawrent-stat-"));
+    const file = path.join(dir, "g.md");
+    fs.writeFileSync(file, "/secret/ || r\n", "utf8");
+    const spy = vi.spyOn(fs, "readFileSync");
+    const policy = createGuardrailPolicy({ guardrailsFile: file });
+    policy.check("hello");
+    policy.check("hello");
+    policy.check("secret stuff");
+    expect(spy.mock.calls.filter((c) => c[0] === file).length).toBe(1); // 仅首载 read
+    fs.writeFileSync(file, "/secret/ || r\n/another-rule-(longer)/ || x\n", "utf8"); // size 变化
+    policy.check("secret stuff");
+    expect(spy.mock.calls.filter((c) => c[0] === file).length).toBe(2); // 签名变 → 重读
+    spy.mockRestore();
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

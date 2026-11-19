@@ -22,8 +22,9 @@ const BLOCK_PATTERNS: GuardrailRule[] = [
 // 消息级 check() 语义冻结(2026-07-16 裁定:对话内容默认只拦结构化 instruction.*,平台不
 // 替越狱检测托底)。pattern 与 guardrails.example.md 同源。
 const METADATA_NL_PATTERNS: GuardrailRule[] = [
-  { re: /(give|send|show)\s+(me\s+)?(token|password|secret|key)/i, reason: "默认元数据规则:凭据索取" },
-  { re: /(给我|发我|提供|索取)\s*(token|密码|password|secret|key|私钥)/i, reason: "默认元数据规则:凭据索取" },
+  // ASCII 词加 \b,避免 "keymap"/"keyboard"/"token in header" 前缀误命中(终审 minor)
+  { re: /(give|send|show)\s+(me\s+)?(token|password|secret|key)\b/i, reason: "默认元数据规则:凭据索取" },
+  { re: /(给我|发我|提供|索取)\s*((token|password|secret|key)\b|密码|私钥)/, reason: "默认元数据规则:凭据索取" },
   // 中缀改为 Kleene 星,覆盖 "all previous"/"以上所有" 等多词叠加(终审 Important:
   // 单选中缀漏过 "ignore all previous instructions" 等教科书短语)
   { re: /(ignore|disregard|skip)\s+((all|previous|the)\s+)*(rules|instructions|guardrails)/i, reason: "默认元数据规则:绕过护栏" },
@@ -142,7 +143,10 @@ function firstMatch(rules: GuardrailRule[], text: string): GuardrailResult {
  * 空格(消除伪造前导标记/多行注入),连续空白折叠,超长截断加省略号。纯函数,永不抛。
  */
 export function sanitizeUntrustedText(text: string, maxLen = 512): string {
-  const flat = text.replace(/[\x00-\x1F]+/g, " ").replace(/ {2,}/g, " ").trim();
+  const flat = text
+      .replace(/[\x00-\x1F\x7F-\x9F\u00A0\u200B-\u200D\u2028\u2029\uFEFF]+/g, " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
   if (flat.length <= maxLen) return flat;
   return flat.slice(0, Math.max(0, maxLen - 1)) + "…";
 }
@@ -177,9 +181,9 @@ export function createGuardrailPolicy(opts: {
 
   const load = (): GuardrailRule[] => {
     const st = fs.statSync(file as string);
-    const content = fs.readFileSync(file as string, "utf8");
     const sig = `${st.mtimeMs}:${st.size}`;
-    if (cache && cache.sig === sig) return cache.rules;
+    if (cache && cache.sig === sig) return cache.rules; // stat-only:签名未变不读文件
+    const content = fs.readFileSync(file as string, "utf8");
     const parsed = parseGuardrailRules(content);
     for (const w of parsed.warnings) log(`[guardrails] policy warning: ${w}`);
     if (errored) log(`[guardrails] guardrailsFile recovered: ${parsed.rules.length} rules loaded`);
